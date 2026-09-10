@@ -885,7 +885,10 @@ function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
     e.preventDefault();
     const loader = loaders.find(l => l.id === Number(loaderId));
     if (!loader) return setErr('Select the loader for this freight.');
-    if (!gp.trim()) return setErr('Gate Pass number is required.');
+       if (!gp.trim()) return setErr('Gate Pass number is required.');
+    const { data: dup } = await supabase.from('freights')
+      .select('id').ilike('gate_pass', gp.trim()).limit(1);
+    if (dup && dup.length) return setErr('Gate Pass No "' + gp.trim() + '" is already used — enter a unique number.');
     const amt = Number(amount);
     if (!amt || amt <= 0) return setErr('Enter a valid freight amount.');
     setErr('');
@@ -1016,8 +1019,11 @@ function EditFreightForm({ rec, loaders, onSave, onClose }) {
     e.preventDefault();
     const loader = loaders.find(l => l.id === Number(f.loader_id));
     if (!loader) return setErr('Select a loader.');
-    if (!f.gate_pass.trim()) return setErr('Gate Pass number is required.');
-    const amt = Number(f.amount);
+       if (!f.gate_pass.trim()) return setErr('Gate Pass number is required.');
+    const { data: dup } = await supabase.from('freights')
+      .select('id').ilike('gate_pass', f.gate_pass.trim()).neq('id', rec.id).limit(1);
+    if (dup && dup.length) return setErr('Gate Pass No "' + f.gate_pass.trim() + '" is already used by another entry.');
+    const amt = Number(f.amount); 
     if (!amt || amt <= 0) return setErr('Enter a valid amount.');
     setSaving(true);
     try {
