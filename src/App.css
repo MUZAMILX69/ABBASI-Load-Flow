@@ -418,3 +418,20 @@ tfoot td.money{font-size:14px}
   .sidebar{display:none!important}
   .main{margin-left:0!important;padding:0!important}
 }
+/* ===== USER MANAGEMENT CARDS ===== */
+.user-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;padding:20px}
+.user-card-item{background:#FAFCF9;border:1.5px solid var(--line);border-radius:14px;padding:18px;
+  transition:transform .15s,box-shadow .15s}
+.user-card-item:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(20,35,31,.08)}
+.user-card-top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.user-card-avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--teal-ink));
+  color:#fff;display:grid;place-items:center;font-weight:700;font-size:20px;flex-shrink:0;
+  font-family:'Bricolage Grotesque';box-shadow:0 4px 10px rgba(14,110,92,.25)}
+.user-card-info{flex:1;min-width:0}
+.user-card-name{font-weight:700;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-card-username{font-family:'IBM Plex Mono';font-size:12px;color:var(--muted);margin-top:2px}
+.user-card-perms{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.perm-tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:16px;background:var(--teal-soft);color:var(--teal);letter-spacing:.03em}
+.perm-tag.full{background:var(--amber-soft);color:var(--amber-deep)}
+.user-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.user-card-foot .btn{min-width:110px;justify-content:center}
