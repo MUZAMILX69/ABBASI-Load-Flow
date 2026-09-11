@@ -24,6 +24,40 @@ const monthLabel = m => new Date(m + '-01T00:00').toLocaleDateString('en-GB', { 
 const edNo = n => 'ED-' + String(n).padStart(3, '0');
 const uid = () => Date.now() + Math.floor(Math.random() * 999);
 
+/* ============ sortable table hook ============ */
+function useSort(defaultKey = '', defaultDir = '') {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortDir, setSortDir] = useState(defaultDir);
+  const toggle = (key) => {
+    if (sortKey !== key) { setSortKey(key); setSortDir('asc'); }
+    else if (sortDir === 'asc') setSortDir('desc');
+    else if (sortDir === 'desc') { setSortKey(''); setSortDir(''); }
+    else setSortDir('asc');
+  };
+  const apply = (list, getters) => {
+    if (!sortKey || !sortDir) return list;
+    const get = getters[sortKey] || (x => x[sortKey]);
+    const cmp = (a, b) => {
+      const va = get(a), vb = get(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'number' && typeof vb === 'number') return va - vb;
+      return String(va).localeCompare(String(vb), undefined, { numeric: true });
+    };
+    return [...list].sort((a, b) => sortDir === 'asc' ? cmp(a, b) : cmp(b, a));
+  };
+  const Th = ({ k, children, align }) => (
+    <th style={{ textAlign: align || 'left', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => toggle(k)}>
+      {children}
+      <span style={{ marginLeft: 5, opacity: sortKey === k ? 1 : 0.3, fontSize: 11 }}>
+        {sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+      </span>
+    </th>
+  );
+  return { sortKey, sortDir, toggle, apply, Th };
+}
+
 /* ============ icons ============ */
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
 const I = {
@@ -207,7 +241,6 @@ function UserManagement({ user }) {
   const [newUser, setNewUser] = useState({ email: '', password: '', full_name: '', username: '' });
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
-
   const fetchProfiles = async () => {
     setLoading(true);
     const { data } = await supabase.from('profiles').select('*').order('username');
@@ -215,41 +248,31 @@ function UserManagement({ user }) {
     setLoading(false);
   };
   useEffect(() => { fetchProfiles(); }, []);
-
   const createUser = async e => {
     e.preventDefault();
     setErr('');
     if (!newUser.email || !newUser.password) { setErr('Email and password required.'); return; }
     try {
       const { error } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: newUser.password,
+        email: newUser.email, password: newUser.password,
         options: { data: { username: newUser.username || newUser.email.split('@')[0], full_name: newUser.full_name } }
       });
       if (error) throw error;
       setNewUser({ email: '', password: '', full_name: '', username: '' });
       setShowForm(false);
       setTimeout(fetchProfiles, 1500);
-    } catch (e2) {
-      setErr(e2.message);
-    }
+    } catch (e2) { setErr(e2.message); }
   };
-
   const updateProfile = async (id, updates) => {
     await supabase.from('profiles').update(updates).eq('id', id);
     fetchProfiles();
   };
-
   if (!user.is_admin) return <div className="empty"><div className="big">🔒</div>Admin access required.</div>;
-
   const filtered = profiles.filter(u => !q || (u.username + ' ' + (u.full_name || '')).toLowerCase().includes(q.toLowerCase()));
-
   return (
     <div className="card rise">
-      <div className="card-h">
-        <h3>User Management</h3>
-        <button className="btn primary small" onClick={() => { setEditing(null); setShowForm(true); }}>{I.plus} Create User</button>
-      </div>
+      <div className="card-h"><h3>User Management</h3>
+        <button className="btn primary small" onClick={() => { setEditing(null); setShowForm(true); }}>{I.plus} Create User</button></div>
       <div className="filters no-print">
         <div className="search-box">{I.search}<input placeholder="Search users…" value={q} onChange={e => setQ(e.target.value)} /></div>
       </div>
@@ -287,7 +310,6 @@ function UserManagement({ user }) {
           ))}
         </div>
       )}
-
       {showForm && !editing && createPortal(
         <div className="overlay" onMouseDown={e => { if (e.target === e.currentTarget) setShowForm(false); }}>
           <div className="modal-card">
@@ -303,10 +325,8 @@ function UserManagement({ user }) {
               <button className="btn primary" type="submit">Create User</button>
             </form>
           </div>
-        </div>,
-        document.body
+        </div>, document.body
       )}
-
       {showForm && editing && (
         <EditProfileModal profile={editing} onSave={updateProfile} onClose={() => { setEditing(null); setShowForm(false); fetchProfiles(); }} />
       )}
@@ -341,37 +361,29 @@ function EditProfileModal({ profile, onSave, onClose }) {
                 <div><h4>Advance</h4>
                   <label><input type="checkbox" checked={f.can_view_advance} onChange={e => set('can_view_advance', e.target.checked)} /> View</label>
                   <label><input type="checkbox" checked={f.can_edit_advance} onChange={e => set('can_edit_advance', e.target.checked)} /> Edit</label>
-                  <label><input type="checkbox" checked={f.can_delete_advance} onChange={e => set('can_delete_advance', e.target.checked)} /> Delete</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_delete_advance} onChange={e => set('can_delete_advance', e.target.checked)} /> Delete</label></div>
                 <div><h4>Freight</h4>
                   <label><input type="checkbox" checked={f.can_view_freight} onChange={e => set('can_view_freight', e.target.checked)} /> View</label>
                   <label><input type="checkbox" checked={f.can_edit_freight} onChange={e => set('can_edit_freight', e.target.checked)} /> Edit</label>
-                  <label><input type="checkbox" checked={f.can_delete_freight} onChange={e => set('can_delete_freight', e.target.checked)} /> Delete</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_delete_freight} onChange={e => set('can_delete_freight', e.target.checked)} /> Delete</label></div>
                 <div><h4>Ledger</h4>
-                  <label><input type="checkbox" checked={f.can_view_ledger} onChange={e => set('can_view_ledger', e.target.checked)} /> View</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_view_ledger} onChange={e => set('can_view_ledger', e.target.checked)} /> View</label></div>
                 <div><h4>Visits</h4>
                   <label><input type="checkbox" checked={f.can_view_visit} onChange={e => set('can_view_visit', e.target.checked)} /> View</label>
                   <label><input type="checkbox" checked={f.can_edit_visit} onChange={e => set('can_edit_visit', e.target.checked)} /> Edit</label>
-                  <label><input type="checkbox" checked={f.can_delete_visit} onChange={e => set('can_delete_visit', e.target.checked)} /> Delete</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_delete_visit} onChange={e => set('can_delete_visit', e.target.checked)} /> Delete</label></div>
                 <div><h4>People</h4>
                   <label><input type="checkbox" checked={f.can_view_people} onChange={e => set('can_view_people', e.target.checked)} /> View</label>
                   <label><input type="checkbox" checked={f.can_edit_people} onChange={e => set('can_edit_people', e.target.checked)} /> Edit</label>
-                  <label><input type="checkbox" checked={f.can_delete_people} onChange={e => set('can_delete_people', e.target.checked)} /> Delete</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_delete_people} onChange={e => set('can_delete_people', e.target.checked)} /> Delete</label></div>
                 <div><h4>Expenses</h4>
                   <label><input type="checkbox" checked={f.can_view_expense} onChange={e => set('can_view_expense', e.target.checked)} /> View</label>
                   <label><input type="checkbox" checked={f.can_edit_expense} onChange={e => set('can_edit_expense', e.target.checked)} /> Edit</label>
-                  <label><input type="checkbox" checked={f.can_delete_expense} onChange={e => set('can_delete_expense', e.target.checked)} /> Delete</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_delete_expense} onChange={e => set('can_delete_expense', e.target.checked)} /> Delete</label></div>
                 <div><h4>Reports</h4>
-                  <label><input type="checkbox" checked={f.can_view_reports} onChange={e => set('can_view_reports', e.target.checked)} /> View</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_view_reports} onChange={e => set('can_view_reports', e.target.checked)} /> View</label></div>
                 <div><h4>Dashboard</h4>
-                  <label><input type="checkbox" checked={f.can_view_dashboard} onChange={e => set('can_view_dashboard', e.target.checked)} /> View</label>
-                </div>
+                  <label><input type="checkbox" checked={f.can_view_dashboard} onChange={e => set('can_view_dashboard', e.target.checked)} /> View</label></div>
               </div>
             </div>
           )}
@@ -381,8 +393,7 @@ function EditProfileModal({ profile, onSave, onClose }) {
           </div>
         </form>
       </div>
-    </div>,
-    document.body
+    </div>, document.body
   );
 }
 
@@ -416,10 +427,7 @@ function Sidebar({ view, setView, people, advances, freights, user, onLogout, op
         </div>
         <div className="user-chip">
           <div className="user-avatar">{(user.username || 'U')[0].toUpperCase()}</div>
-          <div>
-            <div className="user-name">{user.full_name || user.username}</div>
-            <div className="user-role">{user.is_admin ? 'Administrator' : 'User'}</div>
-          </div>
+          <div><div className="user-name">{user.full_name || user.username}</div><div className="user-role">{user.is_admin ? 'Administrator' : 'User'}</div></div>
         </div>
         <nav className="nav">
           {filteredSecs.map(sec => (
@@ -434,7 +442,7 @@ function Sidebar({ view, setView, people, advances, freights, user, onLogout, op
           ))}
         </nav>
         <div className="side-foot">
-          <span>v1.6 · Expenses</span>
+          <span>v1.7 · Sorting</span>
           <button className="btn ghost small" onClick={onLogout} style={{ padding: '6px 12px' }}>{I.logout} Sign out</button>
         </div>
       </aside>
@@ -446,7 +454,7 @@ function Topbar({ view, setView, user, onMenu }) {
   const meta = {
     dashboard: ['Operations', 'Operations Dashboard', 'Advances, freight, visits & people — one control deck'],
     entry: ['Voucher Desk', 'Salary Advance Entry', 'Every entry is auto-alloted the next ED serial'],
-    report: ['Ledger', 'Advance Report', 'Search, filter, edit, print & export the complete advance ledger'],
+    report: ['Ledger', 'Advance Report', 'Search, filter, sort, edit, print & export'],
     empMonthly: ['Statement', 'Employee Monthly Statement', 'Pick an employee and month — every ED entry listed'],
     freight: ['Loader Operations', 'Freight Entry', 'Gatepass freight booked against each loader'],
     ledger: ['Loader Operations', 'Loader Ledger', 'Freight credits minus advance debits — live balance'],
@@ -459,11 +467,7 @@ function Topbar({ view, setView, user, onMenu }) {
   const [crumb, title, sub] = meta[view] || ['Operations', 'Dashboard', ''];
   return (
     <div className="topbar">
-      <div>
-        <div className="crumb">{crumb}</div>
-        <h1 className="disp">{title}</h1>
-        <div className="sub">{sub}</div>
-      </div>
+      <div><div className="crumb">{crumb}</div><h1 className="disp">{title}</h1><div className="sub">{sub}</div></div>
       <div className="top-actions">
         <button className="btn ghost menu-btn" onClick={onMenu} title="Menu">{I.menu}</button>
         <Clock />
@@ -559,7 +563,6 @@ function Dashboard({ people, advances, freights, visits, expenses, setView, user
     </>
   );
 }
-
 /* ============ ADVANCE ENTRY ============ */
 function EntryForm({ people, onSave, user }) {
   const [date, setDate] = useState(today());
@@ -572,46 +575,32 @@ function EntryForm({ people, onSave, user }) {
   const [nextEdNo, setNextEdNo] = useState('ED-001');
   const staff = people.filter(p => p.type === 'Employee' || p.type === 'Loader');
   const others = people.filter(p => p.type === 'Customer' || p.type === 'Relation');
-
   useEffect(() => {
     async function fetchNextEd() {
       const { data } = await supabase.from('advances').select('ed_no').order('id', { ascending: false }).limit(1);
-      if (data && data.length > 0) {
-        const num = parseInt(String(data[0].ed_no).replace(/\D/g, ''), 10) || 0;
-        setNextEdNo(edNo(num + 1));
-      }
+      if (data && data.length > 0) setNextEdNo(edNo(parseInt(String(data[0].ed_no).replace(/\D/g, ''), 10) + 1));
     }
     fetchNextEd();
   }, []);
-
   const doSubmit = async (andPrint, e) => {
     if (e) e.preventDefault();
     const person = people.find(p => String(p.id) === String(pid));
     if (!person) return setErr('Please select the employee / person receiving the advance.');
     const amt = Number(amount);
     if (!amt || amt <= 0) return setErr('Enter a valid amount greater than zero.');
-    setErr('');
-    setSaving(true);
+    setErr(''); setSaving(true);
     try {
       const { data: maxData } = await supabase.from('advances').select('ed_no').order('id', { ascending: false }).limit(1);
       let newEdNo = 'ED-001';
-      if (maxData && maxData.length > 0) {
-        const num = parseInt(String(maxData[0].ed_no).replace(/\D/g, ''), 10) || 0;
-        newEdNo = edNo(num + 1);
-      }
+      if (maxData && maxData.length > 0) newEdNo = edNo(parseInt(String(maxData[0].ed_no).replace(/\D/g, ''), 10) + 1);
       const rec = { ed_no: newEdNo, entry_date: date, person_id: person.id, amount: amt, mode, purpose: purpose.trim() };
       const { data, error } = await supabase.from('advances').insert(rec).select().single();
       if (error) throw error;
       onSave(data, andPrint);
       setAmount(''); setPurpose('');
       setNextEdNo(edNo(parseInt(newEdNo.replace(/\D/g, ''), 10) + 1));
-    } catch (e2) {
-      setErr(e2.message || 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
+    } catch (e2) { setErr(e2.message || 'Failed to save'); } finally { setSaving(false); }
   };
-
   return (
     <div className="entry-wrap">
       <div className="ticket">
@@ -663,12 +652,8 @@ function EditAdvanceForm({ rec, people, onSave, onClose }) {
     try {
       const { error } = await supabase.from('advances').update({ ...f, amount: amt }).eq('id', rec.id);
       if (error) throw error;
-      onSave({ ...rec, ...f, amount: amt });
-      onClose();
-    } catch (e2) {
-      setErr(e2.message || 'Failed to update');
-      setSaving(false);
-    }
+      onSave({ ...rec, ...f, amount: amt }); onClose();
+    } catch (e2) { setErr(e2.message || 'Failed to update'); setSaving(false); }
   };
   return (
     <form onSubmit={submit}>
@@ -677,8 +662,7 @@ function EditAdvanceForm({ rec, people, onSave, onClose }) {
         <div className="field"><label>Date</label><input type="date" value={f.entry_date} onChange={e => set('entry_date', e.target.value)} /></div>
         <div className="field"><label>Employee / Person</label>
           <select value={f.person_id} onChange={e => set('person_id', Number(e.target.value))}>
-            {people.map(p => <option key={p.id} value={p.id}>{p.name} · {p.type}</option>)}
-          </select></div>
+            {people.map(p => <option key={p.id} value={p.id}>{p.name} · {p.type}</option>)}</select></div>
         <div className="field"><label>Amount (Rs)</label><input type="number" min="1" value={f.amount} onChange={e => set('amount', e.target.value)} /></div>
         <div className="field"><label>Payment Mode</label>
           <select value={f.mode} onChange={e => set('mode', e.target.value)}><option>Cash</option><option>Bank Transfer</option><option>JazzCash</option><option>Easypaisa</option></select></div>
@@ -717,8 +701,7 @@ function VoucherOverlay({ rec, people, onClose }) {
         <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Again</button>
         <button className="btn ghost small" onClick={onClose}>Close</button>
       </div>
-    </div>,
-    document.body
+    </div>, document.body
   );
 }
 
@@ -728,6 +711,7 @@ function Report({ advances, people, onDelete, onUpdate, user }) {
   const [mon, setMon] = useState('');
   const [pf, setPf] = useState('');
   const [editing, setEditing] = useState(null);
+  const { apply, Th } = useSort('entry_date', 'desc');
   const months = [...new Set(advances.map(a => a.entry_date ? a.entry_date.slice(0, 7) : ''))].filter(Boolean).sort().reverse();
   const names = [...new Set(advances.map(a => { const p = people.find(x => x.id === a.person_id); return p ? p.name : 'Unknown'; }))].sort();
   const list = [...advances]
@@ -735,31 +719,29 @@ function Report({ advances, people, onDelete, onUpdate, user }) {
     .filter(a => !mon || (a.entry_date && a.entry_date.slice(0, 7) === mon))
     .filter(a => !pf || (people.find(p => p.id === a.person_id)?.name === pf))
     .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  const sorted = apply(list, {
+    ed_no: a => a.ed_no, entry_date: a => a.entry_date,
+    name: a => { const p = people.find(x => x.id === a.person_id); return p ? p.name : ''; },
+    type: a => { const p = people.find(x => x.id === a.person_id); return p ? p.type : ''; },
+    mode: a => a.mode, purpose: a => a.purpose || '', amount: a => Number(a.amount || 0)
+  });
   const total = list.reduce((s, a) => s + Number(a.amount), 0);
-
   const exportCSV = () => {
     const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
     const rows = [['ED No', 'Date', 'Employee', 'Type', 'Mode', 'Purpose', 'Amount (Rs)'],
-      ...list.map(a => {
-        const p = people.find(x => x.id === a.person_id);
-        return [a.ed_no, a.entry_date, p?.name || 'Unknown', p?.type || '—', a.mode, a.purpose, a.amount];
-      })].map(r => r.map(esc).join(',')).join('\r\n');
+      ...list.map(a => { const p = people.find(x => x.id === a.person_id); return [a.ed_no, a.entry_date, p?.name || 'Unknown', p?.type || '—', a.mode, a.purpose, a.amount]; })]
+      .map(r => r.map(esc).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([rows], { type: 'text/csv' }));
-    const a = document.createElement('a');
-    a.href = url; a.download = 'abbasi-advance-report.csv'; a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'abbasi-advance-report.csv'; a.click(); URL.revokeObjectURL(url);
   };
-
   return (
     <div className="card rise">
       <PrintHead title="Salary Advance Report" meta={`${list.length} entries · Total ${fmt(total)}`} />
-      <div className="card-h">
-        <h3>Advance Ledger</h3>
+      <div className="card-h"><h3>Advance Ledger</h3>
         <div style={{ display: 'flex', gap: 8 }} className="no-print">
           <button className="btn ghost small" onClick={exportCSV}>{I.dl} Export CSV</button>
           <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Report</button>
-        </div>
-      </div>
+        </div></div>
       <div className="filters no-print">
         <div className="search-box">{I.search}<input placeholder="Search ED no, name, purpose…" value={q} onChange={e => setQ(e.target.value)} /></div>
         <select value={mon} onChange={e => setMon(e.target.value)}><option value="">All months</option>{months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
@@ -770,44 +752,27 @@ function Report({ advances, people, onDelete, onUpdate, user }) {
         <div className="sumbox"><div className="k">Entries</div><div className="v">{list.length}</div></div>
         <div className="sumbox"><div className="k">Average</div><div className="v">{fmt(list.length ? Math.round(total / list.length) : 0)}</div></div>
       </div>
-      {list.length === 0
-        ? <div className="empty"><div className="big">🗂</div>No advance entries match.</div>
-        : <div className="tbl-wrap">
-          <table>
-            <thead><tr><th>ED No</th><th>Date</th><th>Employee</th><th>Type</th><th>Mode</th><th>Purpose</th><th style={{ textAlign: 'right' }}>Amount</th><th className="no-print"></th></tr></thead>
-            <tbody>
-              {list.map((a, i) => {
-                const p = people.find(x => x.id === a.person_id);
-                return (
-                  <tr key={a.ed_no} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
-                    <td><span className="ed-pill">{a.ed_no}</span></td>
-                    <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(a.entry_date)}</td>
-                    <td style={{ fontWeight: 600 }}>{p ? p.name : 'Unknown'}</td>
-                    <td><span className={p ? 'badge b-' + p.type : 'badge'}>{p ? p.type : '—'}</span></td>
-                    <td>{a.mode}</td>
-                    <td style={{ color: 'var(--muted)' }}>{a.purpose || '—'}</td>
-                    <td className="money" style={{ textAlign: 'right' }}>{fmt(a.amount)}</td>
-                    <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                      {canEdit(user, 'advance') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(a)}>{I.edit}</button>}
-                      {canDelete(user, 'advance') && <button className="icon-btn" title="Delete" onClick={async () => {
-                        if (window.confirm('Delete ' + a.ed_no + '?')) {
-                          const { error } = await supabase.from('advances').delete().eq('id', a.id);
-                          if (error) alert('Delete failed: ' + error.message); else onDelete(a.id);
-                        }
-                      }}>{I.trash}</button>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+      {list.length === 0 ? <div className="empty"><div className="big">🗂</div>No advance entries match.</div>
+        : <div className="tbl-wrap"><table>
+            <thead><tr><Th k="ed_no">ED No</Th><Th k="entry_date">Date</Th><Th k="name">Employee</Th><Th k="type">Type</Th><Th k="mode">Mode</Th><Th k="purpose">Purpose</Th><Th k="amount" align="right">Amount</Th><th className="no-print"></th></tr></thead>
+            <tbody>{sorted.map((a, i) => {
+              const p = people.find(x => x.id === a.person_id);
+              return (<tr key={a.ed_no} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
+                <td><span className="ed-pill">{a.ed_no}</span></td>
+                <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(a.entry_date)}</td>
+                <td style={{ fontWeight: 600 }}>{p ? p.name : 'Unknown'}</td>
+                <td><span className={p ? 'badge b-' + p.type : 'badge'}>{p ? p.type : '—'}</span></td>
+                <td>{a.mode}</td>
+                <td style={{ color: 'var(--muted)' }}>{a.purpose || '—'}</td>
+                <td className="money" style={{ textAlign: 'right' }}>{fmt(a.amount)}</td>
+                <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
+                  {canEdit(user, 'advance') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(a)}>{I.edit}</button>}
+                  {canDelete(user, 'advance') && <button className="icon-btn" title="Delete" onClick={async () => { if (window.confirm('Delete ' + a.ed_no + '?')) { const { error } = await supabase.from('advances').delete().eq('id', a.id); if (error) alert('Delete failed: ' + error.message); else onDelete(a.id); } }}>{I.trash}</button>}
+                </td></tr>);
+            })}</tbody>
             <tfoot><tr><td colSpan="6">TOTAL ADVANCE</td><td className="money" style={{ textAlign: 'right' }}>{fmt(total)}</td><td className="no-print"></td></tr></tfoot>
-          </table>
-        </div>}
-      {editing && (
-        <Modal title={'Edit Voucher ' + editing.ed_no} onClose={() => setEditing(null)}>
-          <EditAdvanceForm rec={editing} people={people} onSave={onUpdate} onClose={() => setEditing(null)} />
-        </Modal>
-      )}
+          </table></div>}
+      {editing && <Modal title={'Edit Voucher ' + editing.ed_no} onClose={() => setEditing(null)}><EditAdvanceForm rec={editing} people={people} onSave={onUpdate} onClose={() => setEditing(null)} /></Modal>}
     </div>
   );
 }
@@ -817,48 +782,33 @@ function EmpMonthly({ people, advances, user }) {
   const staff = people.filter(p => p.type === 'Employee' || p.type === 'Loader');
   const [pid, setPid] = useState(staff[0] ? staff[0].id : '');
   const [mon, setMon] = useState(thisMonthKey());
+  const { apply, Th } = useSort('entry_date', 'asc');
   const person = people.find(p => p.id === pid);
   const list = advances.filter(a => a.person_id === pid && a.entry_date && a.entry_date.slice(0, 7) === mon).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  const sorted = apply(list, { ed_no: a => a.ed_no, entry_date: a => a.entry_date, mode: a => a.mode, purpose: a => a.purpose || '', amount: a => Number(a.amount || 0) });
   const total = list.reduce((s, a) => s + Number(a.amount), 0);
   return (
     <>
       <div className="card rise" style={{ padding: 20, marginBottom: 16 }}>
         <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
           <div className="field" style={{ marginBottom: 0 }}><label>Employee / Loader</label>
-            <select value={pid} onChange={e => setPid(Number(e.target.value))}>
-              {staff.map(p => <option key={p.id} value={p.id}>{p.name} · {p.type}</option>)}
-            </select></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>Month</label>
-            <input type="month" value={mon} onChange={e => setMon(e.target.value)} /></div>
-          <div className="field" style={{ marginBottom: 0, justifyContent: 'flex-end' }}>
-            <button className="btn primary" onClick={() => window.print()}>{I.print} Print Statement</button></div>
+            <select value={pid} onChange={e => setPid(Number(e.target.value))}>{staff.map(p => <option key={p.id} value={p.id}>{p.name} · {p.type}</option>)}</select></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Month</label><input type="month" value={mon} onChange={e => setMon(e.target.value)} /></div>
+          <div className="field" style={{ marginBottom: 0, justifyContent: 'flex-end' }}><button className="btn primary" onClick={() => window.print()}>{I.print} Print Statement</button></div>
         </div>
       </div>
       <div className="card rise">
         <PrintHead title={`Monthly Advance Statement · ${person ? person.name : ''}`} meta={monthLabel(mon) + ` · ${list.length} entries · Total ${fmt(total)}`} />
-        <div className="card-h">
-          <h3>{person ? person.name : 'Select employee'} — {monthLabel(mon)}</h3>
-          <span className="tag">{person ? person.type : ''}{person && person.role ? ' · ' + person.role : ''}</span>
-        </div>
-        {list.length === 0
-          ? <div className="empty"><div className="big">📄</div>No advance entries for this employee in {monthLabel(mon)}.</div>
-          : <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>ED No</th><th>Date</th><th>Payment Mode</th><th>Purpose</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
-              <tbody>
-                {list.map((a, i) => (
-                  <tr key={a.ed_no} style={{ animationDelay: i * 40 + 'ms' }}>
-                    <td><span className="ed-pill">{a.ed_no}</span></td>
-                    <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(a.entry_date)}</td>
-                    <td>{a.mode}</td>
-                    <td style={{ color: 'var(--muted)' }}>{a.purpose || '—'}</td>
-                    <td className="money" style={{ textAlign: 'right' }}>{fmt(a.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
+        <div className="card-h"><h3>{person ? person.name : 'Select employee'} — {monthLabel(mon)}</h3>
+          <span className="tag">{person ? person.type : ''}{person && person.role ? ' · ' + person.role : ''}</span></div>
+        {list.length === 0 ? <div className="empty"><div className="big">📄</div>No advance entries for this employee in {monthLabel(mon)}.</div>
+          : <div className="tbl-wrap"><table>
+              <thead><tr><Th k="ed_no">ED No</Th><Th k="entry_date">Date</Th><Th k="mode">Payment Mode</Th><Th k="purpose">Purpose</Th><Th k="amount" align="right">Amount</Th></tr></thead>
+              <tbody>{sorted.map((a, i) => (<tr key={a.ed_no} style={{ animationDelay: i * 40 + 'ms' }}>
+                <td><span className="ed-pill">{a.ed_no}</span></td><td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(a.entry_date)}</td>
+                <td>{a.mode}</td><td style={{ color: 'var(--muted)' }}>{a.purpose || '—'}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(a.amount)}</td></tr>))}</tbody>
               <tfoot><tr><td colSpan="4">TOTAL ADVANCE — {monthLabel(mon)}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(total)}</td></tr></tfoot>
-            </table>
-          </div>}
+            </table></div>}
       </div>
     </>
   );
@@ -878,17 +828,19 @@ function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
   const [q, setQ] = useState('');
   const [filterLoader, setFilterLoader] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
-
+  const { apply, Th } = useSort('entry_date', 'desc');
   const months = [...new Set(freights.map(f => f.entry_date ? f.entry_date.slice(0, 7) : ''))].filter(Boolean).sort().reverse();
-
   const filtered = [...freights]
     .filter(f => !q || (f.gate_pass || '').toLowerCase().includes(q.toLowerCase()) || (f.note || '').toLowerCase().includes(q.toLowerCase()))
     .filter(f => !filterLoader || f.loader_id === Number(filterLoader))
     .filter(f => !filterMonth || (f.entry_date && f.entry_date.slice(0, 7) === filterMonth))
     .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-
+  const sorted = apply(filtered, {
+    gate_pass: f => f.gate_pass, entry_date: f => f.entry_date,
+    loader: f => { const l = people.find(p => p.id === f.loader_id); return l ? l.name : ''; },
+    note: f => f.note || '', amount: f => Number(f.amount || 0)
+  });
   const filteredTotal = filtered.reduce((s, f) => s + Number(f.amount || 0), 0);
-
   const submit = async e => {
     e.preventDefault();
     const loader = loaders.find(l => l.id === Number(loaderId));
@@ -898,33 +850,21 @@ function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
     if (dup && dup.length) return setErr('Gate Pass No "' + gp.trim() + '" is already used — enter a unique number.');
     const amt = Number(amount);
     if (!amt || amt <= 0) return setErr('Enter a valid freight amount.');
-    setErr('');
-    setSaving(true);
+    setErr(''); setSaving(true);
     try {
       const { data, error } = await supabase.from('freights').insert({ gate_pass: gp.trim(), entry_date: date, loader_id: loader.id, amount: amt, note: note.trim() }).select().single();
       if (error) throw error;
-      onSave(data);
-      setGp(''); setAmount(''); setNote('');
-    } catch (e2) {
-      setErr(e2.message || 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
+      onSave(data); setGp(''); setAmount(''); setNote('');
+    } catch (e2) { setErr(e2.message || 'Failed to save'); } finally { setSaving(false); }
   };
-
   const exportCSV = () => {
     const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
     const rows = [['Gate Pass', 'Date', 'Loader', 'Amount (Rs)', 'Note'],
-      ...filtered.map(f => {
-        const l = people.find(p => p.id === f.loader_id);
-        return [f.gate_pass, f.entry_date, l?.name || 'Unknown', f.amount, f.note];
-      })].map(r => r.map(esc).join(',')).join('\r\n');
+      ...filtered.map(f => { const l = people.find(p => p.id === f.loader_id); return [f.gate_pass, f.entry_date, l?.name || 'Unknown', f.amount, f.note]; })]
+      .map(r => r.map(esc).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([rows], { type: 'text/csv' }));
-    const a = document.createElement('a');
-    a.href = url; a.download = 'abbasi-freight-report.csv'; a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'abbasi-freight-report.csv'; a.click(); URL.revokeObjectURL(url);
   };
-
   return (
     <>
       <form className="card rise" style={{ padding: 24, marginBottom: 16 }} onSubmit={submit}>
@@ -934,8 +874,7 @@ function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
         <div className="field"><label>Loader</label>
           <select value={loaderId} onChange={e => setLoaderId(e.target.value)}>
             <option value="">— select loader —</option>
-            {loaders.map(l => <option key={l.id} value={l.id}>{l.name} · {l.role || 'Loader'}</option>)}
-          </select></div>
+            {loaders.map(l => <option key={l.id} value={l.id}>{l.name} · {l.role || 'Loader'}</option>)}</select></div>
         <div className="form-grid">
           <div className="field"><label>Gate Pass No</label><input value={gp} onChange={e => setGp(e.target.value)} placeholder="e.g. GP-1060" /></div>
           <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
@@ -944,69 +883,39 @@ function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
         <div className="field"><label>Note</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Lahore consignments…" /></div>
         <button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add to Loader Ledger'}</button>
       </form>
-
       <div className="card rise">
-        <div className="card-h">
-          <h3>Freight Register</h3>
+        <div className="card-h"><h3>Freight Register</h3>
           <div style={{ display: 'flex', gap: 8 }} className="no-print">
             <button className="btn ghost small" onClick={exportCSV}>{I.dl} Export CSV</button>
-            <button className="btn primary small" onClick={() => window.print()}>{I.print} Print</button>
-          </div>
-        </div>
+            <button className="btn primary small" onClick={() => window.print()}>{I.print} Print</button></div></div>
         <div className="filters no-print">
           <div className="search-box">{I.search}<input placeholder="Search gate pass, note…" value={q} onChange={e => setQ(e.target.value)} /></div>
-          <select value={filterLoader} onChange={e => setFilterLoader(e.target.value)}>
-            <option value="">All loaders</option>
-            {loaders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
-            <option value="">All months</option>
-            {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
-          </select>
+          <select value={filterLoader} onChange={e => setFilterLoader(e.target.value)}><option value="">All loaders</option>{loaders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+          <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}><option value="">All months</option>{months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
         </div>
         <div className="sumbar">
           <div className="sumbox hot"><div className="k">Total Freight</div><div className="v">{fmt(filteredTotal)}</div></div>
           <div className="sumbox"><div className="k">Entries</div><div className="v">{filtered.length}</div></div>
           <div className="sumbox"><div className="k">Average</div><div className="v">{fmt(filtered.length ? Math.round(filteredTotal / filtered.length) : 0)}</div></div>
         </div>
-        {filtered.length === 0
-          ? <div className="empty"><div className="big">📦</div>No freight entries match your search.</div>
-          : <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>Gate Pass</th><th>Date</th><th>Loader</th><th>Note</th><th style={{ textAlign: 'right' }}>Amount</th><th className="no-print"></th></tr></thead>
-              <tbody>
-                {filtered.map((f, i) => {
-                  const loader = people.find(p => p.id === f.loader_id);
-                  return (
-                    <tr key={f.id} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
-                      <td><span className="gp-pill">{f.gate_pass}</span></td>
-                      <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(f.entry_date)}</td>
-                      <td style={{ fontWeight: 600 }}>{loader ? loader.name : 'Unknown'}</td>
-                      <td style={{ color: 'var(--muted)' }}>{f.note || '—'}</td>
-                      <td className="money" style={{ textAlign: 'right', color: 'var(--teal)' }}>+{fmt(f.amount)}</td>
-                      <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                        {canEdit(user, 'freight') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(f)}>{I.edit}</button>}
-                        {canDelete(user, 'freight') && <button className="icon-btn" title="Delete" onClick={async () => {
-                          if (window.confirm('Delete freight ' + f.gate_pass + '?')) {
-                            const { error } = await supabase.from('freights').delete().eq('id', f.id);
-                            if (error) alert('Delete failed: ' + error.message); else onDelete(f.id);
-                          }
-                        }}>{I.trash}</button>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+        {filtered.length === 0 ? <div className="empty"><div className="big">📦</div>No freight entries match your search.</div>
+          : <div className="tbl-wrap"><table>
+              <thead><tr><Th k="gate_pass">Gate Pass</Th><Th k="entry_date">Date</Th><Th k="loader">Loader</Th><Th k="note">Note</Th><Th k="amount" align="right">Amount</Th><th className="no-print"></th></tr></thead>
+              <tbody>{sorted.map((f, i) => {
+                const loader = people.find(p => p.id === f.loader_id);
+                return (<tr key={f.id} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
+                  <td><span className="gp-pill">{f.gate_pass}</span></td><td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(f.entry_date)}</td>
+                  <td style={{ fontWeight: 600 }}>{loader ? loader.name : 'Unknown'}</td><td style={{ color: 'var(--muted)' }}>{f.note || '—'}</td>
+                  <td className="money" style={{ textAlign: 'right', color: 'var(--teal)' }}>+{fmt(f.amount)}</td>
+                  <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
+                    {canEdit(user, 'freight') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(f)}>{I.edit}</button>}
+                    {canDelete(user, 'freight') && <button className="icon-btn" title="Delete" onClick={async () => { if (window.confirm('Delete freight ' + f.gate_pass + '?')) { const { error } = await supabase.from('freights').delete().eq('id', f.id); if (error) alert('Delete failed: ' + error.message); else onDelete(f.id); } }}>{I.trash}</button>}
+                  </td></tr>);
+              })}</tbody>
               <tfoot><tr><td colSpan="4">TOTAL FREIGHT</td><td className="money" style={{ textAlign: 'right' }}>{fmt(filteredTotal)}</td><td className="no-print"></td></tr></tfoot>
-            </table>
-          </div>}
+            </table></div>}
       </div>
-
-      {editing && (
-        <Modal title={'Edit Freight ' + editing.gate_pass} onClose={() => setEditing(null)}>
-          <EditFreightForm rec={editing} loaders={loaders} onSave={onUpdate} onClose={() => setEditing(null)} />
-        </Modal>
-      )}
+      {editing && <Modal title={'Edit Freight ' + editing.gate_pass} onClose={() => setEditing(null)}><EditFreightForm rec={editing} loaders={loaders} onSave={onUpdate} onClose={() => setEditing(null)} /></Modal>}
     </>
   );
 }
@@ -1029,20 +938,14 @@ function EditFreightForm({ rec, loaders, onSave, onClose }) {
     try {
       const { error } = await supabase.from('freights').update({ ...f, amount: amt }).eq('id', rec.id);
       if (error) throw error;
-      onSave({ ...rec, ...f, amount: amt });
-      onClose();
-    } catch (e2) {
-      setErr(e2.message || 'Failed to update');
-      setSaving(false);
-    }
+      onSave({ ...rec, ...f, amount: amt }); onClose();
+    } catch (e2) { setErr(e2.message || 'Failed to update'); setSaving(false); }
   };
   return (
     <form onSubmit={submit}>
       {err && <div className="err">{err}</div>}
       <div className="field"><label>Loader</label>
-        <select value={f.loader_id} onChange={e => set('loader_id', Number(e.target.value))}>
-          {loaders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select></div>
+        <select value={f.loader_id} onChange={e => set('loader_id', Number(e.target.value))}>{loaders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
       <div className="form-grid">
         <div className="field"><label>Gate Pass No</label><input value={f.gate_pass} onChange={e => set('gate_pass', e.target.value)} /></div>
         <div className="field"><label>Date</label><input type="date" value={f.entry_date} onChange={e => set('entry_date', e.target.value)} /></div>
@@ -1064,120 +967,68 @@ function LoaderLedger({ people, advances, freights }) {
   const [fromM, setFromM] = useState(thisMonthKey());
   const [toM, setToM] = useState(thisMonthKey());
   const [allTime, setAllTime] = useState(false);
-
-  useEffect(() => {
-    if (loaders.length && !loaders.find(l => l.id === lid)) setLid(loaders[0].id);
-  }, [loaders.length, lid]);
-
+  const { apply, Th } = useSort('date', 'asc');
+  useEffect(() => { if (loaders.length && !loaders.find(l => l.id === lid)) setLid(loaders[0].id); }, [loaders.length, lid]);
   const loader = loaders.find(l => l.id === lid) || null;
   const monthOf = r => (r.date ? String(r.date).slice(0, 7) : '');
-
   const allRows = useMemo(() => {
     if (!lid) return [];
-    const credit = freights.filter(f => f.loader_id === lid)
-      .map(f => ({ date: f.entry_date, ts: f.created_at || '', ref: f.gate_pass, refType: 'gp', desc: 'Freight · ' + (f.note || 'gatepass entry'), credit: Number(f.amount) || 0, debit: 0 }));
-    const debit = advances.filter(a => a.person_id === lid)
-      .map(a => ({ date: a.entry_date, ts: a.created_at || '', ref: a.ed_no, refType: 'ed', desc: 'Advance · ' + (a.purpose || 'salary advance'), credit: 0, debit: Number(a.amount) || 0 }));
+    const credit = freights.filter(f => f.loader_id === lid).map(f => ({ date: f.entry_date, ts: f.created_at || '', ref: f.gate_pass, refType: 'gp', desc: 'Freight · ' + (f.note || 'gatepass entry'), credit: Number(f.amount) || 0, debit: 0 }));
+    const debit = advances.filter(a => a.person_id === lid).map(a => ({ date: a.entry_date, ts: a.created_at || '', ref: a.ed_no, refType: 'ed', desc: 'Advance · ' + (a.purpose || 'salary advance'), credit: 0, debit: Number(a.amount) || 0 }));
     const all = [...credit, ...debit].sort((a, b) => (String(a.date) === String(b.date) ? String(a.ts).localeCompare(String(b.ts)) : String(a.date).localeCompare(String(b.date))));
     let bal = 0;
     return all.map(r => { bal += r.credit - r.debit; return { ...r, bal }; });
   }, [lid, advances, freights]);
-
   const rows = useMemo(() => allTime ? allRows : allRows.filter(r => monthOf(r) >= fromM && monthOf(r) <= toM), [allRows, fromM, toM, allTime]);
-  const opening = useMemo(() => {
-    if (allTime) return 0;
-    const before = allRows.filter(r => monthOf(r) < fromM);
-    return before.length ? before[before.length - 1].bal : 0;
-  }, [allRows, fromM, allTime]);
-
-  if (loaders.length === 0) {
-    return <div className="card rise"><div className="empty"><div className="big">🧾</div>No loaders found.<br />Add a <b>Loader</b> in People Register.</div></div>;
-  }
-
+  const opening = useMemo(() => { if (allTime) return 0; const before = allRows.filter(r => monthOf(r) < fromM); return before.length ? before[before.length - 1].bal : 0; }, [allRows, fromM, allTime]);
+  if (loaders.length === 0) return <div className="card rise"><div className="empty"><div className="big">🧾</div>No loaders found.<br />Add a <b>Loader</b> in People Register.</div></div>;
   const totCredit = rows.reduce((s, r) => s + r.credit, 0);
   const totDebit = rows.reduce((s, r) => s + r.debit, 0);
   const closing = opening + totCredit - totDebit;
   const periodLabel = allTime ? 'All time' : (fromM === toM ? monthLabel(fromM) : monthLabel(fromM) + ' → ' + monthLabel(toM));
-
+  const sorted = apply(rows, { date: r => r.date, ref: r => r.ref, desc: r => r.desc, debit: r => r.debit, credit: r => r.credit, bal: r => r.bal });
   const setThis = () => { setAllTime(false); setFromM(thisMonthKey()); setToM(thisMonthKey()); };
-  const setLast = () => {
-    const d = new Date(); const p = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-    const k = p.getFullYear() + '-' + String(p.getMonth() + 1).padStart(2, '0');
-    setAllTime(false); setFromM(k); setToM(k);
-  };
-
+  const setLast = () => { const d = new Date(); const p = new Date(d.getFullYear(), d.getMonth() - 1, 1); const k = p.getFullYear() + '-' + String(p.getMonth() + 1).padStart(2, '0'); setAllTime(false); setFromM(k); setToM(k); };
   return (
     <>
       <div className="card rise" style={{ padding: 20, marginBottom: 16 }}>
         <div className="form-grid" style={{ gridTemplateColumns: '1.4fr 1fr 1fr auto' }}>
           <div className="field" style={{ marginBottom: 0 }}><label>Select Loader</label>
-            <select value={lid} onChange={e => setLid(Number(e.target.value))}>
-              {loaders.map(l => <option key={l.id} value={l.id}>{l.name} · {l.role || 'Loader'}</option>)}
-            </select></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>From Month</label>
-            <input type="month" value={fromM} disabled={allTime} onChange={e => { setFromM(e.target.value); setAllTime(false); }} /></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>To Month</label>
-            <input type="month" value={toM} disabled={allTime} onChange={e => { setToM(e.target.value); setAllTime(false); }} /></div>
-          <div className="field" style={{ marginBottom: 0, justifyContent: 'flex-end' }}>
-            <button className="btn primary" onClick={() => window.print()}>{I.print} Print Ledger</button></div>
+            <select value={lid} onChange={e => setLid(Number(e.target.value))}>{loaders.map(l => <option key={l.id} value={l.id}>{l.name} · {l.role || 'Loader'}</option>)}</select></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>From Month</label><input type="month" value={fromM} disabled={allTime} onChange={e => { setFromM(e.target.value); setAllTime(false); }} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>To Month</label><input type="month" value={toM} disabled={allTime} onChange={e => { setToM(e.target.value); setAllTime(false); }} /></div>
+          <div className="field" style={{ marginBottom: 0, justifyContent: 'flex-end' }}><button className="btn primary" onClick={() => window.print()}>{I.print} Print Ledger</button></div>
         </div>
         <div className="tabs" style={{ padding: '14px 0 0', borderBottom: 'none' }}>
           <button className={'tab' + (!allTime && fromM === thisMonthKey() && toM === thisMonthKey() ? ' active' : '')} onClick={setThis}>This Month</button>
           <button className={'tab' + (!allTime && fromM === toM && fromM !== thisMonthKey() ? ' active' : '')} onClick={setLast}>Last Month</button>
           <button className={'tab' + (allTime ? ' active' : '')} onClick={() => setAllTime(v => !v)}>All Time</button>
-          <span style={{ alignSelf: 'center', marginLeft: 10, fontSize: 12.5, color: 'var(--muted)' }}>
-            Showing: <b style={{ color: 'var(--ink)' }}>{periodLabel}</b>
-          </span>
+          <span style={{ alignSelf: 'center', marginLeft: 10, fontSize: 12.5, color: 'var(--muted)' }}>Showing: <b style={{ color: 'var(--ink)' }}>{periodLabel}</b></span>
         </div>
       </div>
-
       {loader && (
         <div className="card rise">
-          <PrintHead title={`Loader Ledger · ${loader.name}`}
-            meta={`${periodLabel} · Opening ${fmt(opening)} + Freight ${fmt(totCredit)} − Advance ${fmt(totDebit)} = Closing ${fmt(closing)}`} />
-          <div className="card-h">
-            <h3>{loader.name} — Ledger</h3>
-            <span className="tag">{loader.phone || 'no phone'}{loader.role ? ' · ' + loader.role : ''}</span>
-          </div>
+          <PrintHead title={`Loader Ledger · ${loader.name}`} meta={`${periodLabel} · Opening ${fmt(opening)} + Freight ${fmt(totCredit)} − Advance ${fmt(totDebit)} = Closing ${fmt(closing)}`} />
+          <div className="card-h"><h3>{loader.name} — Ledger</h3><span className="tag">{loader.phone || 'no phone'}{loader.role ? ' · ' + loader.role : ''}</span></div>
           <div className="sumbar">
             <div className="sumbox"><div className="k">Opening Balance</div><div className="v">{fmt(opening)}</div></div>
             <div className="sumbox"><div className="k">Freight Earned</div><div className="v" style={{ color: 'var(--teal)' }}>+{fmt(totCredit)}</div></div>
             <div className="sumbox"><div className="k">Advance Taken</div><div className="v" style={{ color: 'var(--coral)' }}>−{fmt(totDebit)}</div></div>
             <div className="sumbox hot"><div className="k">{closing >= 0 ? 'Balance Payable' : 'Recoverable'}</div><div className="v">{fmt(Math.abs(closing))}</div></div>
           </div>
-          {rows.length === 0 && opening === 0
-            ? <div className="empty"><div className="big">📒</div>No ledger entries for {periodLabel.toLowerCase()}.</div>
-            : <div className="tbl-wrap">
-              <table>
-                <thead><tr><th>Date</th><th>Ref</th><th>Particulars</th><th style={{ textAlign: 'right' }}>Advance (−)</th><th style={{ textAlign: 'right' }}>Freight (+)</th><th style={{ textAlign: 'right' }}>Balance</th></tr></thead>
+          {rows.length === 0 && opening === 0 ? <div className="empty"><div className="big">📒</div>No ledger entries for {periodLabel.toLowerCase()}.</div>
+            : <div className="tbl-wrap"><table>
+                <thead><tr><Th k="date">Date</Th><Th k="ref">Ref</Th><Th k="desc">Particulars</Th><Th k="debit" align="right">Advance (−)</Th><Th k="credit" align="right">Freight (+)</Th><Th k="bal" align="right">Balance</Th></tr></thead>
                 <tbody>
-                  {!allTime && (
-                    <tr>
-                      <td className="mono" style={{ fontSize: 12.5 }}>—</td>
-                      <td><span className="ed-pill">OPEN</span></td>
-                      <td>Opening balance before {monthLabel(fromM)}</td>
-                      <td className="money" style={{ textAlign: 'right', color: 'var(--muted)' }}>—</td>
-                      <td className="money" style={{ textAlign: 'right', color: 'var(--muted)' }}>—</td>
-                      <td className="money" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(opening)}</td>
-                    </tr>
-                  )}
-                  {rows.map((r, i) => (
-                    <tr key={i} style={{ animationDelay: Math.min(i * 25, 300) + 'ms' }}>
-                      <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(r.date)}</td>
-                      <td><span className={r.refType === 'gp' ? 'gp-pill' : 'ed-pill'}>{r.ref}</span></td>
-                      <td>{r.desc}</td>
-                      <td className="money" style={{ textAlign: 'right', color: r.debit ? 'var(--coral)' : 'var(--muted)' }}>{r.debit ? fmt(r.debit) : '—'}</td>
-                      <td className="money" style={{ textAlign: 'right', color: r.credit ? 'var(--teal)' : 'var(--muted)' }}>{r.credit ? fmt(r.credit) : '—'}</td>
-                      <td className="money" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(r.bal)}</td>
-                    </tr>
-                  ))}
+                  {!allTime && (<tr><td className="mono" style={{ fontSize: 12.5 }}>—</td><td><span className="ed-pill">OPEN</span></td><td>Opening balance before {monthLabel(fromM)}</td><td className="money" style={{ textAlign: 'right', color: 'var(--muted)' }}>—</td><td className="money" style={{ textAlign: 'right', color: 'var(--muted)' }}>—</td><td className="money" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(opening)}</td></tr>)}
+                  {sorted.map((r, i) => (<tr key={i} style={{ animationDelay: Math.min(i * 25, 300) + 'ms' }}>
+                    <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(r.date)}</td><td><span className={r.refType === 'gp' ? 'gp-pill' : 'ed-pill'}>{r.ref}</span></td><td>{r.desc}</td>
+                    <td className="money" style={{ textAlign: 'right', color: r.debit ? 'var(--coral)' : 'var(--muted)' }}>{r.debit ? fmt(r.debit) : '—'}</td>
+                    <td className="money" style={{ textAlign: 'right', color: r.credit ? 'var(--teal)' : 'var(--muted)' }}>{r.credit ? fmt(r.credit) : '—'}</td>
+                    <td className="money" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(r.bal)}</td></tr>))}
                 </tbody>
-                <tfoot><tr><td colSpan="3">TOTALS · {periodLabel}</td>
-                  <td className="money" style={{ textAlign: 'right', color: 'var(--coral)' }}>{fmt(totDebit)}</td>
-                  <td className="money" style={{ textAlign: 'right', color: 'var(--teal)' }}>{fmt(totCredit)}</td>
-                  <td className="money" style={{ textAlign: 'right' }}>{fmt(closing)}</td></tr></tfoot>
-              </table>
-            </div>}
+                <tfoot><tr><td colSpan="3">TOTALS · {periodLabel}</td><td className="money" style={{ textAlign: 'right', color: 'var(--coral)' }}>{fmt(totDebit)}</td><td className="money" style={{ textAlign: 'right', color: 'var(--teal)' }}>{fmt(totCredit)}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(closing)}</td></tr></tfoot>
+              </table></div>}
         </div>
       )}
     </>
@@ -1195,18 +1046,14 @@ function EditExpenseForm({ rec, categories, onSave, onClose }) {
     if (!amt || amt <= 0) return setErr('Enter a valid amount.');
     const { error } = await supabase.from('expenses').update({ ...f, amount: amt }).eq('id', rec.id);
     if (error) return setErr(error.message);
-    onSave({ ...rec, ...f, amount: amt });
-    onClose();
+    onSave({ ...rec, ...f, amount: amt }); onClose();
   };
   return (
     <form onSubmit={submit}>
       {err && <div className="err">{err}</div>}
       <div className="form-grid">
         <div className="field"><label>Date</label><input type="date" value={f.entry_date} onChange={e => set('entry_date', e.target.value)} /></div>
-        <div className="field"><label>Expense</label>
-          <select value={f.category_id} onChange={e => set('category_id', Number(e.target.value))}>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select></div>
+        <div className="field"><label>Expense</label><select value={f.category_id} onChange={e => set('category_id', Number(e.target.value))}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
         <div className="field"><label>Amount (Rs)</label><input type="number" min="1" value={f.amount} onChange={e => set('amount', e.target.value)} /></div>
       </div>
       <div className="field"><label>Detail</label><input value={f.detail} onChange={e => set('detail', e.target.value)} /></div>
@@ -1231,9 +1078,9 @@ function ExpensePage({ expenses, categories, user, onSave, onUpdate, onDelete, o
   const [to, setTo] = useState(today());
   const [newCat, setNewCat] = useState('');
   const [editing, setEditing] = useState(null);
-
+  const { apply, Th } = useSort('entry_date', 'desc');
+  const { apply: applyCat, Th: ThCat } = useSort('name', 'asc');
   const catName = id => { const c = categories.find(x => x.id === id); return c ? c.name : 'Unknown'; };
-
   const submit = async e => {
     e.preventDefault();
     const cat = categories.find(c => String(c.id) === String(catId));
@@ -1244,58 +1091,28 @@ function ExpensePage({ expenses, categories, user, onSave, onUpdate, onDelete, o
     try {
       const { data, error } = await supabase.from('expenses').insert({ entry_date: date, category_id: cat.id, detail: detail.trim(), amount: amt }).select().single();
       if (error) throw error;
-      onSave(data);
-      setDetail(''); setAmount('');
+      onSave(data); setDetail(''); setAmount('');
     } catch (e2) { setErr(e2.message); } finally { setSaving(false); }
   };
-
   const list = [...expenses]
     .filter(x => x.entry_date >= from && x.entry_date <= to)
-    .filter(x => {
-      if (!q) return true;
-      const hay = (catName(x.category_id) + ' ' + (x.detail || '') + ' ' + String(x.amount)).toLowerCase();
-      return hay.includes(q.toLowerCase());
-    })
+    .filter(x => { if (!q) return true; const hay = (catName(x.category_id) + ' ' + (x.detail || '') + ' ' + String(x.amount)).toLowerCase(); return hay.includes(q.toLowerCase()); })
     .sort((a, b) => String(b.entry_date).localeCompare(String(a.entry_date)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const sorted = apply(list, { entry_date: x => x.entry_date, category: x => catName(x.category_id), detail: x => x.detail || '', amount: x => Number(x.amount || 0) });
   const total = list.reduce((s, x) => s + Number(x.amount || 0), 0);
-  const byCat = Object.values(list.reduce((m, x) => {
-    const k = catName(x.category_id);
-    m[k] = m[k] || { name: k, count: 0, total: 0 };
-    m[k].count++; m[k].total += Number(x.amount || 0); return m;
-  }, {})).sort((a, b) => b.total - a.total);
-
+  const byCat = Object.values(list.reduce((m, x) => { const k = catName(x.category_id); m[k] = m[k] || { name: k, count: 0, total: 0 }; m[k].count++; m[k].total += Number(x.amount || 0); return m; }, {})).sort((a, b) => b.total - a.total);
+  const sortedCats = applyCat(categories.map(c => ({ ...c, used: expenses.filter(x => x.category_id === c.id).length })), { name: c => c.name, used: c => c.used });
   const exportCSV = () => {
     const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const rows = [['Date', 'Expense', 'Detail', 'Amount (Rs)'],
-      ...list.map(x => [x.entry_date, catName(x.category_id), x.detail, x.amount])]
-      .map(r => r.map(esc).join(',')).join('\r\n');
+    const rows = [['Date', 'Expense', 'Detail', 'Amount (Rs)'], ...list.map(x => [x.entry_date, catName(x.category_id), x.detail, x.amount])].map(r => r.map(esc).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([rows], { type: 'text/csv' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'abbasi-expense-report.csv'; a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'abbasi-expense-report.csv'; a.click(); URL.revokeObjectURL(url);
   };
-
-  const addCat = async e => {
-    e.preventDefault();
-    const n = newCat.trim();
-    if (!n) return;
-    const { data, error } = await supabase.from('expense_categories').insert({ name: n }).select().single();
-    if (error) { alert(error.message); return; }
-    onAddCategory(data); setNewCat('');
-  };
-  const delCat = async c => {
-    if (expenses.some(x => x.category_id === c.id)) { alert('Cannot delete "' + c.name + '" — it is used in expense entries.'); return; }
-    if (!window.confirm('Delete expense type "' + c.name + '"?')) return;
-    const { error } = await supabase.from('expense_categories').delete().eq('id', c.id);
-    if (error) alert(error.message); else onDeleteCategory(c.id);
-  };
-
+  const addCat = async e => { e.preventDefault(); const n = newCat.trim(); if (!n) return; const { data, error } = await supabase.from('expense_categories').insert({ name: n }).select().single(); if (error) { alert(error.message); return; } onAddCategory(data); setNewCat(''); };
+  const delCat = async c => { if (expenses.some(x => x.category_id === c.id)) { alert('Cannot delete "' + c.name + '" — it is used in expense entries.'); return; } if (!window.confirm('Delete expense type "' + c.name + '"?')) return; const { error } = await supabase.from('expense_categories').delete().eq('id', c.id); if (error) alert(error.message); else onDeleteCategory(c.id); };
   const setThis = () => { setFrom(today().slice(0, 8) + '01'); setTo(today()); };
-  const setLast = () => {
-    const d = new Date(); const p1 = new Date(d.getFullYear(), d.getMonth() - 1, 1); const p2 = new Date(d.getFullYear(), d.getMonth(), 0);
-    setFrom(p1.toISOString().slice(0, 10)); setTo(p2.toISOString().slice(0, 10));
-  };
+  const setLast = () => { const d = new Date(); const p1 = new Date(d.getFullYear(), d.getMonth() - 1, 1); const p2 = new Date(d.getFullYear(), d.getMonth(), 0); setFrom(p1.toISOString().slice(0, 10)); setTo(p2.toISOString().slice(0, 10)); };
   const setAll = () => { setFrom('2000-01-01'); setTo(today()); };
-
   return (
     <div className="card rise">
       <div className="tabs no-print">
@@ -1303,155 +1120,87 @@ function ExpensePage({ expenses, categories, user, onSave, onUpdate, onDelete, o
         <button className={'tab' + (tab === 'report' ? ' active' : '')} onClick={() => setTab('report')}>Expense Report</button>
         <button className={'tab' + (tab === 'cats' ? ' active' : '')} onClick={() => setTab('cats')}>Expense Types ({categories.length})</button>
       </div>
-
       {tab === 'entry' && (
         <form style={{ padding: 24 }} onSubmit={submit}>
           {err && <div className="err">{err}</div>}
           <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
             <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
-            <div className="field"><label>Expense</label>
-              <select value={catId} onChange={e => setCatId(e.target.value)}>
-                <option value="">— select expense type —</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select></div>
+            <div className="field"><label>Expense</label><select value={catId} onChange={e => setCatId(e.target.value)}><option value="">— select expense type —</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             <div className="field"><label>Amount (Rs)</label><input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 2500" /></div>
           </div>
           <div className="field"><label>Detail</label><input value={detail} onChange={e => setDetail(e.target.value)} placeholder="e.g. Bike fuel for Lahore run…" /></div>
-          {canEdit(user, 'expense')
-            ? <button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Expense'}</button>
-            : <div className="err">You have view-only access for expenses.</div>}
+          {canEdit(user, 'expense') ? <button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Expense'}</button> : <div className="err">You have view-only access for expenses.</div>}
         </form>
       )}
-
-      {tab === 'report' && (
-        <>
-          <PrintHead title="Expense Report" meta={`${fmtDate(from)} → ${fmtDate(to)} · ${list.length} entries · Total ${fmt(total)}`} />
-          <div className="filters no-print">
-            <div className="search-box">{I.search}<input placeholder="Search expense, detail, amount…" value={q} onChange={e => setQ(e.target.value)} /></div>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} />
-            <button className="btn ghost small" onClick={exportCSV}>{I.dl} CSV</button>
-            <button className="btn primary small" onClick={() => window.print()}>{I.print} Print</button>
-          </div>
-          <div className="filters no-print" style={{ borderTop: 'none', paddingTop: 0 }}>
-            <button className="chip" onClick={setThis}>This Month</button>
-            <button className="chip" onClick={setLast}>Last Month</button>
-            <button className="chip" onClick={setAll}>All Time</button>
-          </div>
-          <div className="sumbar">
-            <div className="sumbox hot"><div className="k">Total Expense</div><div className="v">{fmt(total)}</div></div>
-            <div className="sumbox"><div className="k">Entries</div><div className="v">{list.length}</div></div>
-            <div className="sumbox"><div className="k">Average</div><div className="v">{fmt(list.length ? Math.round(total / list.length) : 0)}</div></div>
-          </div>
-          {list.length === 0
-            ? <div className="empty"><div className="big">💸</div>No expenses in this period / search.</div>
-            : <div className="tbl-wrap">
-              <table>
-                <thead><tr><th>Date</th><th>Expense</th><th>Detail</th><th style={{ textAlign: 'right' }}>Amount</th><th className="no-print"></th></tr></thead>
-                <tbody>
-                  {list.map((x, i) => (
-                    <tr key={x.id} style={{ animationDelay: Math.min(i * 25, 300) + 'ms' }}>
-                      <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(x.entry_date)}</td>
-                      <td><span className="badge b-Customer">{catName(x.category_id)}</span></td>
-                      <td style={{ color: 'var(--muted)' }}>{x.detail || '—'}</td>
-                      <td className="money" style={{ textAlign: 'right', color: 'var(--coral)' }}>−{fmt(x.amount)}</td>
-                      <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                        {canEdit(user, 'expense') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(x)}>{I.edit}</button>}
-                        {canDelete(user, 'expense') && <button className="icon-btn" title="Delete" onClick={async () => {
-                          if (window.confirm('Delete this expense of ' + fmt(x.amount) + '?')) {
-                            const { error } = await supabase.from('expenses').delete().eq('id', x.id);
-                            if (error) alert('Delete failed: ' + error.message); else onDelete(x.id);
-                          }
-                        }}>{I.trash}</button>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot><tr><td colSpan="3">TOTAL EXPENSE · {fmtDate(from)} → {fmtDate(to)}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(total)}</td><td className="no-print"></td></tr></tfoot>
-              </table>
-            </div>}
-          {byCat.length > 0 && (
-            <>
-              <div className="card-h" style={{ borderTop: '1px solid var(--line)' }}><h3>Expense-wise breakdown</h3><span className="tag">{byCat.length} types</span></div>
-              <div className="tbl-wrap">
-                <table>
-                  <thead><tr><th>Expense Type</th><th>Entries</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
-                  <tbody>{byCat.map(b => (
-                    <tr key={b.name}><td style={{ fontWeight: 600 }}>{b.name}</td><td>{b.count}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(b.total)}</td></tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </>
-      )}
-
+      {tab === 'report' && (<>
+        <PrintHead title="Expense Report" meta={`${fmtDate(from)} → ${fmtDate(to)} · ${list.length} entries · Total ${fmt(total)}`} />
+        <div className="filters no-print">
+          <div className="search-box">{I.search}<input placeholder="Search expense, detail, amount…" value={q} onChange={e => setQ(e.target.value)} /></div>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} /><input type="date" value={to} onChange={e => setTo(e.target.value)} />
+          <button className="btn ghost small" onClick={exportCSV}>{I.dl} CSV</button><button className="btn primary small" onClick={() => window.print()}>{I.print} Print</button>
+        </div>
+        <div className="filters no-print" style={{ borderTop: 'none', paddingTop: 0 }}>
+          <button className="chip" onClick={setThis}>This Month</button><button className="chip" onClick={setLast}>Last Month</button><button className="chip" onClick={setAll}>All Time</button>
+        </div>
+        <div className="sumbar">
+          <div className="sumbox hot"><div className="k">Total Expense</div><div className="v">{fmt(total)}</div></div>
+          <div className="sumbox"><div className="k">Entries</div><div className="v">{list.length}</div></div>
+          <div className="sumbox"><div className="k">Average</div><div className="v">{fmt(list.length ? Math.round(total / list.length) : 0)}</div></div>
+        </div>
+        {list.length === 0 ? <div className="empty"><div className="big">💸</div>No expenses in this period / search.</div>
+          : <div className="tbl-wrap"><table>
+              <thead><tr><Th k="entry_date">Date</Th><Th k="category">Expense</Th><Th k="detail">Detail</Th><Th k="amount" align="right">Amount</Th><th className="no-print"></th></tr></thead>
+              <tbody>{sorted.map((x, i) => (<tr key={x.id} style={{ animationDelay: Math.min(i * 25, 300) + 'ms' }}>
+                <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(x.entry_date)}</td><td><span className="badge b-Customer">{catName(x.category_id)}</span></td>
+                <td style={{ color: 'var(--muted)' }}>{x.detail || '—'}</td><td className="money" style={{ textAlign: 'right', color: 'var(--coral)' }}>−{fmt(x.amount)}</td>
+                <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
+                  {canEdit(user, 'expense') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(x)}>{I.edit}</button>}
+                  {canDelete(user, 'expense') && <button className="icon-btn" title="Delete" onClick={async () => { if (window.confirm('Delete this expense of ' + fmt(x.amount) + '?')) { const { error } = await supabase.from('expenses').delete().eq('id', x.id); if (error) alert('Delete failed: ' + error.message); else onDelete(x.id); } }}>{I.trash}</button>}
+                </td></tr>))}</tbody>
+              <tfoot><tr><td colSpan="3">TOTAL EXPENSE · {fmtDate(from)} → {fmtDate(to)}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(total)}</td><td className="no-print"></td></tr></tfoot>
+            </table></div>}
+        {byCat.length > 0 && (<><div className="card-h" style={{ borderTop: '1px solid var(--line)' }}><h3>Expense-wise breakdown</h3><span className="tag">{byCat.length} types</span></div>
+          <div className="tbl-wrap"><table><thead><tr><th>Expense Type</th><th>Entries</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
+            <tbody>{byCat.map(b => (<tr key={b.name}><td style={{ fontWeight: 600 }}>{b.name}</td><td>{b.count}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(b.total)}</td></tr>))}</tbody></table></div></>)}
+      </>)}
       {tab === 'cats' && (
         <div style={{ padding: 24 }}>
-          {canEdit(user, 'expense') && (
-            <form onSubmit={addCat} className="form-grid" style={{ gridTemplateColumns: '2fr auto', alignItems: 'end' }}>
-              <div className="field" style={{ marginBottom: 0 }}><label>New Expense Type</label>
-                <input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="e.g. Fuel, Maintenance, Rent…" /></div>
-              <button className="btn primary" type="submit">{I.plus} Add Type</button>
-            </form>
-          )}
-          <div className="tbl-wrap" style={{ marginTop: 18 }}>
-            <table>
-              <thead><tr><th>Expense Type</th><th>Entries Used</th><th></th></tr></thead>
-              <tbody>
-                {categories.map(c => {
-                  const n = expenses.filter(x => x.category_id === c.id).length;
-                  return (
-                    <tr key={c.id}>
-                      <td style={{ fontWeight: 600 }}>{c.name}</td>
-                      <td>{n}</td>
-                      <td>{canDelete(user, 'expense') && <button className="icon-btn" title="Delete type" onClick={() => delCat(c)}>{I.trash}</button>}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {canEdit(user, 'expense') && (<form onSubmit={addCat} className="form-grid" style={{ gridTemplateColumns: '2fr auto', alignItems: 'end' }}>
+            <div className="field" style={{ marginBottom: 0 }}><label>New Expense Type</label><input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="e.g. Fuel, Maintenance, Rent…" /></div>
+            <button className="btn primary" type="submit">{I.plus} Add Type</button></form>)}
+          <div className="tbl-wrap" style={{ marginTop: 18 }}><table>
+            <thead><tr><ThCat k="name">Expense Type</ThCat><ThCat k="used">Entries Used</ThCat><th></th></tr></thead>
+            <tbody>{sortedCats.map(c => (<tr key={c.id}><td style={{ fontWeight: 600 }}>{c.name}</td><td>{c.used}</td>
+              <td>{canDelete(user, 'expense') && <button className="icon-btn" title="Delete type" onClick={() => delCat(c)}>{I.trash}</button>}</td></tr>))}</tbody>
+          </table></div>
         </div>
       )}
-
-      {editing && (
-        <Modal title={'Edit Expense · ' + fmtDate(editing.entry_date)} onClose={() => setEditing(null)}>
-          <EditExpenseForm rec={editing} categories={categories} onSave={onUpdate} onClose={() => setEditing(null)} />
-        </Modal>
-      )}
+      {editing && <Modal title={'Edit Expense · ' + fmtDate(editing.entry_date)} onClose={() => setEditing(null)}><EditExpenseForm rec={editing} categories={categories} onSave={onUpdate} onClose={() => setEditing(null)} /></Modal>}
     </div>
   );
 }
 
 /* ============ VISIT ENTRY ============ */
 const blankLine = () => ({ id: uid(), customer: '', contact_type: 'Visited', success: true, time_value: '', time_unit: 'mins', payment: 'Not Received', note: '' });
-
 function VisitRowsEditor({ lines, setLines, customers }) {
   const setLine = (id, key, val) => setLines(ls => ls.map(l => l.id === id ? { ...l, [key]: val } : l));
   const addLine = () => setLines(ls => [...ls, blankLine()]);
   const rmLine = id => setLines(ls => ls.length > 1 ? ls.filter(l => l.id !== id) : ls);
-  return (
-    <>
-      <datalist id="custList">{customers.map(c => <option key={c.id} value={c.name} />)}</datalist>
-      <label className="field-label-sec">Customer stops on this run</label>
-      {lines.map(l => (
-        <div className="vrow" key={l.id}>
-          <input list="custList" placeholder="Customer" value={l.customer} onChange={e => setLine(l.id, 'customer', e.target.value)} />
-          <select value={l.contact_type} onChange={e => setLine(l.id, 'contact_type', e.target.value)}><option>Visited</option><option>Phone Call</option></select>
-          <select value={String(l.success)} onChange={e => setLine(l.id, 'success', e.target.value === 'true')}><option value="true">Success</option><option value="false">Not Success</option></select>
-          <div className="time-pair">
-            <input type="number" min="0" placeholder="Time" value={l.time_value} onChange={e => setLine(l.id, 'time_value', e.target.value)} />
-            <select value={l.time_unit} onChange={e => setLine(l.id, 'time_unit', e.target.value)}><option value="mins">mins</option><option value="hrs">hrs</option></select>
-          </div>
-          <select value={l.payment} onChange={e => setLine(l.id, 'payment', e.target.value)}><option value="Received">Payment Received</option><option value="Not Received">Payment Pending</option></select>
-          <input placeholder="Note" value={l.note} onChange={e => setLine(l.id, 'note', e.target.value)} />
-          <button type="button" className="icon-btn" onClick={() => rmLine(l.id)} title="Remove row">{I.trash}</button>
-        </div>
-      ))}
-      <button type="button" className="btn ghost small" onClick={addLine}>{I.plus} Add Stop</button>
-    </>
-  );
+  return (<>
+    <datalist id="custList">{customers.map(c => <option key={c.id} value={c.name} />)}</datalist>
+    <label className="field-label-sec">Customer stops on this run</label>
+    {lines.map(l => (<div className="vrow" key={l.id}>
+      <input list="custList" placeholder="Customer" value={l.customer} onChange={e => setLine(l.id, 'customer', e.target.value)} />
+      <select value={l.contact_type} onChange={e => setLine(l.id, 'contact_type', e.target.value)}><option>Visited</option><option>Phone Call</option></select>
+      <select value={String(l.success)} onChange={e => setLine(l.id, 'success', e.target.value === 'true')}><option value="true">Success</option><option value="false">Not Success</option></select>
+      <div className="time-pair"><input type="number" min="0" placeholder="Time" value={l.time_value} onChange={e => setLine(l.id, 'time_value', e.target.value)} />
+        <select value={l.time_unit} onChange={e => setLine(l.id, 'time_unit', e.target.value)}><option value="mins">mins</option><option value="hrs">hrs</option></select></div>
+      <select value={l.payment} onChange={e => setLine(l.id, 'payment', e.target.value)}><option value="Received">Payment Received</option><option value="Not Received">Payment Pending</option></select>
+      <input placeholder="Note" value={l.note} onChange={e => setLine(l.id, 'note', e.target.value)} />
+      <button type="button" className="icon-btn" onClick={() => rmLine(l.id)} title="Remove row">{I.trash}</button>
+    </div>))}
+    <button type="button" className="btn ghost small" onClick={addLine}>{I.plus} Add Stop</button>
+  </>);
 }
 
 function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
@@ -1465,46 +1214,28 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const customers = people.filter(p => p.type === 'Customer' || p.type === 'Relation');
-
-  const filteredRuns = useMemo(() => {
-    return [...visits]
-      .filter(v => !fromDate || v.visit_date >= fromDate)
-      .filter(v => !toDate || v.visit_date <= toDate)
-      .filter(v => {
-        if (!q) return true;
-        const hay = (v.visit_date + ' ' + String(v.bike_km) + ' ' +
-          (v.visit_entries || []).map(x => x.customer + ' ' + (x.note || '')).join(' ')).toLowerCase();
-        return hay.includes(q.toLowerCase());
-      })
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  }, [visits, q, fromDate, toDate]);
-
+  const filteredRuns = useMemo(() => [...visits]
+    .filter(v => !fromDate || v.visit_date >= fromDate).filter(v => !toDate || v.visit_date <= toDate)
+    .filter(v => { if (!q) return true; const hay = (v.visit_date + ' ' + String(v.bike_km) + ' ' + (v.visit_entries || []).map(x => x.customer + ' ' + (x.note || '')).join(' ')).toLowerCase(); return hay.includes(q.toLowerCase()); })
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [visits, q, fromDate, toDate]);
   const totalKm = filteredRuns.reduce((s, v) => s + Number(v.bike_km || 0), 0);
   const totalStops = filteredRuns.reduce((s, v) => s + (v.visit_entries ? v.visit_entries.length : 0), 0);
-
   const submit = async e => {
     e.preventDefault();
     if (!date) return setErr('Select the run date.');
     if (km === '' || Number(km) < 0) return setErr('Enter daily bike run in KM.');
     const filled = lines.filter(l => l.customer.trim());
     if (filled.length === 0) return setErr('Add at least one customer stop.');
-    setErr('');
-    setSaving(true);
+    setErr(''); setSaving(true);
     try {
       const { data: visit, error: visitErr } = await supabase.from('visits').insert({ visit_date: date, bike_km: Number(km) }).select().single();
       if (visitErr) throw visitErr;
       const entries = filled.map(l => ({ visit_id: visit.id, customer: l.customer.trim(), contact_type: l.contact_type, success: l.success, time_value: Number(l.time_value) || 0, time_unit: l.time_unit, payment: l.payment, note: l.note.trim() }));
       const { error: entriesErr } = await supabase.from('visit_entries').insert(entries);
       if (entriesErr) throw entriesErr;
-      onSave({ ...visit, visit_entries: entries });
-      setKm(''); setLines([blankLine()]);
-    } catch (e2) {
-      setErr(e2.message || 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
+      onSave({ ...visit, visit_entries: entries }); setKm(''); setLines([blankLine()]);
+    } catch (e2) { setErr(e2.message || 'Failed to save'); } finally { setSaving(false); }
   };
-
   return (
     <div className="grid-2 rise" style={{ alignItems: 'start' }}>
       <form className="card" style={{ padding: 24 }} onSubmit={submit}>
@@ -1515,56 +1246,32 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
           <div className="field"><label>Daily Bike Run (KM)</label><input type="number" min="0" step="0.1" value={km} onChange={e => setKm(e.target.value)} placeholder="e.g. 42" /></div>
         </div>
         <VisitRowsEditor lines={lines} setLines={setLines} customers={customers} />
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-          <button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Visit Run'}</button>
-        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}><button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Visit Run'}</button></div>
       </form>
-
       <div className="card">
         <div className="card-h"><h3>Recent Runs</h3><span className="tag">{filteredRuns.length} of {visits.length} runs</span></div>
-
         <div className="filters no-print" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-          <div className="search-box">{I.search}<input placeholder="Search customer, note, date…" value={q} onChange={e => setQ(e.target.value)} /></div>
-        </div>
+          <div className="search-box">{I.search}<input placeholder="Search customer, note, date…" value={q} onChange={e => setQ(e.target.value)} /></div></div>
         <div className="filters no-print" style={{ paddingTop: 8 }}>
           <div className="field" style={{ margin: 0, minWidth: 140 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
           <div className="field" style={{ margin: 0, minWidth: 140 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
-          {(fromDate || toDate || q) && <button className="chip" onClick={() => { setQ(''); setFromDate(''); setToDate(''); }}>Clear</button>}
-        </div>
-
+          {(fromDate || toDate || q) && <button className="chip" onClick={() => { setQ(''); setFromDate(''); setToDate(''); }}>Clear</button>}</div>
         <div className="sumbar">
           <div className="sumbox hot"><div className="k">Total KM</div><div className="v">{totalKm} km</div></div>
           <div className="sumbox"><div className="k">Runs</div><div className="v">{filteredRuns.length}</div></div>
-          <div className="sumbox"><div className="k">Total Stops</div><div className="v">{totalStops}</div></div>
-        </div>
-
+          <div className="sumbox"><div className="k">Total Stops</div><div className="v">{totalStops}</div></div></div>
         <div className="rlist">
           {filteredRuns.length === 0 && <div className="empty"><div className="big">🛵</div>No runs match your search.</div>}
-          {filteredRuns.map(v => (
-            <div className="rrow" key={v.id}>
-              <span className="km-pill">{v.bike_km} km</span>
-              <div>
-                <div className="nm">{fmtDate(v.visit_date)}</div>
-                <div className="dt">{v.visit_entries ? v.visit_entries.length : 0} stops · {v.visit_entries ? v.visit_entries.filter(x => x.contact_type === 'Visited').length : 0} visited</div>
-              </div>
-              <div className="amt-r">{v.visit_entries ? v.visit_entries.filter(x => x.payment === 'Received').length : 0}/{v.visit_entries ? v.visit_entries.length : 0} paid</div>
-              {canEdit(user, 'visit') && <button className="icon-btn edit" title="Edit run" onClick={() => setEditing(v)}>{I.edit}</button>}
-              {canDelete(user, 'visit') && <button className="icon-btn" title="Delete run" onClick={async () => {
-                if (window.confirm('Delete this visit run?')) {
-                  const { error } = await supabase.from('visits').delete().eq('id', v.id);
-                  if (error) alert('Delete failed: ' + error.message); else onDelete(v.id);
-                }
-              }}>{I.trash}</button>}
-            </div>
-          ))}
+          {filteredRuns.map(v => (<div className="rrow" key={v.id}>
+            <span className="km-pill">{v.bike_km} km</span>
+            <div><div className="nm">{fmtDate(v.visit_date)}</div><div className="dt">{v.visit_entries ? v.visit_entries.length : 0} stops · {v.visit_entries ? v.visit_entries.filter(x => x.contact_type === 'Visited').length : 0} visited</div></div>
+            <div className="amt-r">{v.visit_entries ? v.visit_entries.filter(x => x.payment === 'Received').length : 0}/{v.visit_entries ? v.visit_entries.length : 0} paid</div>
+            {canEdit(user, 'visit') && <button className="icon-btn edit" title="Edit run" onClick={() => setEditing(v)}>{I.edit}</button>}
+            {canDelete(user, 'visit') && <button className="icon-btn" title="Delete run" onClick={async () => { if (window.confirm('Delete this visit run?')) { const { error } = await supabase.from('visits').delete().eq('id', v.id); if (error) alert('Delete failed: ' + error.message); else onDelete(v.id); } }}>{I.trash}</button>}
+          </div>))}
         </div>
       </div>
-
-      {editing && (
-        <Modal title={'Edit Visit Run — ' + fmtDate(editing.visit_date)} wide onClose={() => setEditing(null)}>
-          <EditVisitForm rec={editing} customers={customers} onSave={onUpdate} onClose={() => setEditing(null)} />
-        </Modal>
-      )}
+      {editing && <Modal title={'Edit Visit Run — ' + fmtDate(editing.visit_date)} wide onClose={() => setEditing(null)}><EditVisitForm rec={editing} customers={customers} onSave={onUpdate} onClose={() => setEditing(null)} /></Modal>}
     </div>
   );
 }
@@ -1586,12 +1293,8 @@ function EditVisitForm({ rec, customers, onSave, onClose }) {
       await supabase.from('visit_entries').delete().eq('visit_id', rec.id);
       const entries = filled.map(l => ({ visit_id: rec.id, customer: l.customer.trim(), contact_type: l.contact_type, success: l.success, time_value: Number(l.time_value) || 0, time_unit: l.time_unit, payment: l.payment, note: l.note.trim() }));
       await supabase.from('visit_entries').insert(entries);
-      onSave({ ...rec, visit_date: date, bike_km: Number(km), visit_entries: entries });
-      onClose();
-    } catch (e2) {
-      setErr(e2.message || 'Failed to update');
-      setSaving(false);
-    }
+      onSave({ ...rec, visit_date: date, bike_km: Number(km), visit_entries: entries }); onClose();
+    } catch (e2) { setErr(e2.message || 'Failed to update'); setSaving(false); }
   };
   return (
     <form onSubmit={submit}>
@@ -1612,16 +1315,28 @@ function EditVisitForm({ rec, customers, onSave, onClose }) {
 /* ============ VISIT REPORTS ============ */
 function VisitReports({ visits }) {
   const [tab, setTab] = useState('daily');
-  const [date, setDate] = useState(today());
-  const [mon, setMon] = useState(thisMonthKey());
-  const dayRuns = visits.filter(v => v.visit_date === date);
+  const [fromDate, setFromDate] = useState(today().slice(0, 8) + '01');
+  const [toDate, setToDate] = useState(today());
+  const [fromMonth, setFromMonth] = useState(thisMonthKey());
+  const [toMonth, setToMonth] = useState(thisMonthKey());
+
+  /* ---- Daily Report: filter by date range ---- */
+  const dayRuns = useMemo(() => [...visits]
+    .filter(v => v.visit_date >= fromDate && v.visit_date <= toDate)
+    .sort((a, b) => a.visit_date.localeCompare(b.visit_date)), [visits, fromDate, toDate]);
+
   const dayStops = dayRuns.flatMap(v => v.visit_entries || []);
   const dKm = dayRuns.reduce((s, v) => s + Number(v.bike_km || 0), 0);
   const dVisited = dayStops.filter(x => x.contact_type === 'Visited');
   const dCalls = dayStops.filter(x => x.contact_type === 'Phone Call');
   const dSuccess = dayStops.filter(x => x.success);
   const dPaid = dayStops.filter(x => x.payment === 'Received');
-  const monthRuns = visits.filter(v => v.visit_date && v.visit_date.slice(0, 7) === mon).sort((a, b) => a.visit_date.localeCompare(b.visit_date));
+
+  /* ---- Monthly Report: filter by month range ---- */
+  const monthRuns = useMemo(() => [...visits]
+    .filter(v => v.visit_date && v.visit_date.slice(0, 7) >= fromMonth && v.visit_date.slice(0, 7) <= toMonth)
+    .sort((a, b) => a.visit_date.localeCompare(b.visit_date)), [visits, fromMonth, toMonth]);
+
   const byDay = monthRuns.reduce((m, v) => {
     m[v.visit_date] = m[v.visit_date] || { km: 0, visited: [], calls: 0, paid: 0, stops: 0 };
     m[v.visit_date].km += Number(v.bike_km || 0);
@@ -1636,6 +1351,20 @@ function VisitReports({ visits }) {
   const dayKeys = Object.keys(byDay).sort();
   const mKm = dayKeys.reduce((s, k) => s + byDay[k].km, 0);
   const mVisitedCount = dayKeys.reduce((s, k) => s + byDay[k].visited.length, 0);
+  const mTotalStops = dayKeys.reduce((s, k) => s + byDay[k].stops, 0);
+  const mTotalPaid = dayKeys.reduce((s, k) => s + byDay[k].paid, 0);
+
+  /* ---- Quick buttons ---- */
+  const setThisMonth = () => { setFromMonth(thisMonthKey()); setToMonth(thisMonthKey()); setFromDate(today().slice(0, 8) + '01'); setToDate(today()); };
+  const setLastMonth = () => {
+    const d = new Date(); const p = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    const k = p.getFullYear() + '-' + String(p.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(d.getFullYear(), d.getMonth(), 0).toISOString().slice(0, 10);
+    setFromMonth(k); setToMonth(k); setFromDate(k + '-01'); setToDate(lastDay);
+  };
+  const setAllTime = () => { setFromMonth('2020-01'); setToMonth('2099-12'); setFromDate('2020-01-01'); setToDate('2099-12-31'); };
+  const periodLabel = fromDate === toDate ? fmtDate(fromDate) : fmtDate(fromDate) + ' → ' + fmtDate(toDate);
+  const monthPeriodLabel = fromMonth === toMonth ? monthLabel(fromMonth) : monthLabel(fromMonth) + ' → ' + monthLabel(toMonth);
 
   return (
     <div className="card rise">
@@ -1643,79 +1372,110 @@ function VisitReports({ visits }) {
         <button className={'tab' + (tab === 'daily' ? ' active' : '')} onClick={() => setTab('daily')}>Daily Visit Report</button>
         <button className={'tab' + (tab === 'monthly' ? ' active' : '')} onClick={() => setTab('monthly')}>Monthly Bike Run (KM)</button>
       </div>
-      {tab === 'daily' && (
-        <>
-          <PrintHead title="Daily Customer Visit Report" meta={`${fmtDate(date)} · ${dKm} km · ${dayStops.length} stops`} />
-          <div className="filters no-print">
-            <div className="field" style={{ margin: 0, minWidth: 190 }}><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
-            <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Daily Report</button>
-          </div>
-          <div className="sumbar">
-            <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{dKm} km</div></div>
-            <div className="sumbox"><div className="k">Customers Visited</div><div className="v">{dVisited.length}</div></div>
-            <div className="sumbox"><div className="k">Phone Calls</div><div className="v">{dCalls.length}</div></div>
-            <div className="sumbox"><div className="k">Successful</div><div className="v">{dSuccess.length}</div></div>
-            <div className="sumbox"><div className="k">Payments Received</div><div className="v">{dPaid.length}</div></div>
-          </div>
-          {dayRuns.length === 0
-            ? <div className="empty"><div className="big">🛵</div>No visit run logged for {fmtDate(date)}.</div>
-            : dayRuns.map(v => (
-              <div key={v.id} className="tbl-wrap" style={{ borderTop: '1px solid var(--line)' }}>
-                <table>
-                  <thead>
-                    <tr><th colSpan="6" style={{ background: '#F7FAF6' }}>Run — {fmtDate(v.visit_date)} · <span className="mono">{v.bike_km} km</span></th></tr>
-                    <tr><th>Customer</th><th>Contact Type</th><th>Result</th><th>Time Spent</th><th>Payment</th><th>Note</th></tr>
-                  </thead>
-                  <tbody>
-                    {(v.visit_entries || []).map(x => (
-                      <tr key={x.id}>
-                        <td style={{ fontWeight: 600 }}>{x.customer}</td>
-                        <td><span className={x.contact_type === 'Visited' ? 'badge b-Loader' : 'badge b-Customer'}>{x.contact_type}</span></td>
-                        <td><span className={x.success ? 'badge b-Employee' : 'badge b-Relation'}>{x.success ? '✓ Success' : 'Not Success'}</span></td>
-                        <td className="mono" style={{ fontSize: 12.5 }}>{x.time_value || '—'} {x.time_unit === 'hrs' ? 'hr' : 'min'}</td>
-                        <td>{x.payment === 'Received' ? <span className="badge b-Employee">Received</span> : <span className="badge b-Loader">Pending</span>}</td>
-                        <td style={{ color: 'var(--muted)' }}>{x.note || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-        </>
-      )}
-      {tab === 'monthly' && (
-        <>
-          <PrintHead title="Monthly Bike Run Report" meta={`${monthLabel(mon)} · Total Run ${mKm} km · ${mVisitedCount} customers visited`} />
-          <div className="filters no-print">
-            <div className="field" style={{ margin: 0, minWidth: 190 }}><input type="month" value={mon} onChange={e => setMon(e.target.value)} /></div>
-            <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Monthly Report</button>
-          </div>
-          {dayKeys.length === 0
-            ? <div className="empty"><div className="big">🗓</div>No bike runs logged in {monthLabel(mon)}.</div>
-            : <div className="tbl-wrap">
-              <table>
-                <thead><tr><th>Date</th><th style={{ textAlign: 'right' }}>KM Run</th><th>Customers Visited</th><th style={{ textAlign: 'right' }}>Calls</th><th style={{ textAlign: 'right' }}>Payments</th></tr></thead>
-                <tbody>
-                  {dayKeys.map((k, i) => (
-                    <tr key={k} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
-                      <td className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{fmtDate(k)}</td>
-                      <td className="money" style={{ textAlign: 'right' }}>{byDay[k].km} km</td>
-                      <td>{byDay[k].visited.length ? byDay[k].visited.join(', ') : <span style={{ color: 'var(--muted)' }}>no visits</span>}</td>
-                      <td style={{ textAlign: 'right' }}>{byDay[k].calls}</td>
-                      <td style={{ textAlign: 'right' }}>{byDay[k].paid}/{byDay[k].stops}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot><tr>
-                  <td>TOTAL RUN — {monthLabel(mon)}</td>
-                  <td className="money" style={{ textAlign: 'right' }}>{mKm} km</td>
-                  <td>{mVisitedCount} customers visited</td>
-                  <td></td><td></td>
-                </tr></tfoot>
-              </table>
-            </div>}
-        </>
-      )}
+
+      {/* ===== DAILY VISIT REPORT ===== */}
+      {tab === 'daily' && (<>
+        <PrintHead title="Daily Customer Visit Report" meta={`${periodLabel} · ${dKm} km · ${dayStops.length} stops`} />
+        <div className="filters no-print">
+          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
+          <button className="chip" onClick={setThisMonth}>This Month</button>
+          <button className="chip" onClick={setLastMonth}>Last Month</button>
+          <button className="chip" onClick={setAllTime}>All Time</button>
+          <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayRuns.length} runs found</span>
+          <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
+        </div>
+        <div className="sumbar">
+          <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{dKm} km</div></div>
+          <div className="sumbox"><div className="k">Runs</div><div className="v">{dayRuns.length}</div></div>
+          <div className="sumbox"><div className="k">Customers Visited</div><div className="v">{dVisited.length}</div></div>
+          <div className="sumbox"><div className="k">Phone Calls</div><div className="v">{dCalls.length}</div></div>
+          <div className="sumbox"><div className="k">Successful</div><div className="v">{dSuccess.length}</div></div>
+          <div className="sumbox"><div className="k">Payments Received</div><div className="v">{dPaid.length}</div></div>
+        </div>
+        {dayRuns.length === 0
+          ? <div className="empty"><div className="big">🛵</div>No visit runs between {fmtDate(fromDate)} and {fmtDate(toDate)}.</div>
+          : dayRuns.map(v => {
+              const stops = v.visit_entries || [];
+              const rKm = Number(v.bike_km || 0);
+              const rVisited = stops.filter(x => x.contact_type === 'Visited').length;
+              const rCalls = stops.filter(x => x.contact_type === 'Phone Call').length;
+              const rSuccess = stops.filter(x => x.success).length;
+              const rPaid = stops.filter(x => x.payment === 'Received').length;
+              return (
+                <div key={v.id} className="tbl-wrap" style={{ borderTop: '1px solid var(--line)' }}>
+                  <table>
+                    <thead>
+                      <tr><th colSpan="6" style={{ background: '#F7FAF6' }}>
+                        Run — {fmtDate(v.visit_date)} · <span className="mono">{rKm} km</span>
+                        <span style={{ float: 'right', fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>
+                          {rVisited} visited · {rCalls} calls · {rSuccess} success · {rPaid}/{stops.length} paid
+                        </span>
+                      </th></tr>
+                      <tr><th>Customer</th><th>Contact Type</th><th>Result</th><th>Time Spent</th><th>Payment</th><th>Note</th></tr>
+                    </thead>
+                    <tbody>
+                      {stops.map(x => (
+                        <tr key={x.id}>
+                          <td style={{ fontWeight: 600 }}>{x.customer}</td>
+                          <td><span className={x.contact_type === 'Visited' ? 'badge b-Loader' : 'badge b-Customer'}>{x.contact_type}</span></td>
+                          <td><span className={x.success ? 'badge b-Employee' : 'badge b-Relation'}>{x.success ? '✓ Success' : 'Not Success'}</span></td>
+                          <td className="mono" style={{ fontSize: 12.5 }}>{x.time_value || '—'} {x.time_unit === 'hrs' ? 'hr' : 'min'}</td>
+                          <td>{x.payment === 'Received' ? <span className="badge b-Employee">Received</span> : <span className="badge b-Loader">Pending</span>}</td>
+                          <td style={{ color: 'var(--muted)' }}>{x.note || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+      </>)}
+
+      {/* ===== MONTHLY BIKE RUN REPORT ===== */}
+      {tab === 'monthly' && (<>
+        <PrintHead title="Monthly Bike Run Report" meta={`${monthPeriodLabel} · Total Run ${mKm} km · ${mVisitedCount} customers visited`} />
+        <div className="filters no-print">
+          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Month</label><input type="month" value={fromMonth} onChange={e => setFromMonth(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Month</label><input type="month" value={toMonth} onChange={e => setToMonth(e.target.value)} /></div>
+          <button className="chip" onClick={setThisMonth}>This Month</button>
+          <button className="chip" onClick={setLastMonth}>Last Month</button>
+          <button className="chip" onClick={setAllTime}>All Time</button>
+          <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayKeys.length} days found</span>
+          <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
+        </div>
+        <div className="sumbar">
+          <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{mKm} km</div></div>
+          <div className="sumbox"><div className="k">Days Active</div><div className="v">{dayKeys.length}</div></div>
+          <div className="sumbox"><div className="k">Customers Visited</div><div className="v">{mVisitedCount}</div></div>
+          <div className="sumbox"><div className="k">Total Stops</div><div className="v">{mTotalStops}</div></div>
+          <div className="sumbox"><div className="k">Payments</div><div className="v">{mTotalPaid}/{mTotalStops}</div></div>
+        </div>
+        {dayKeys.length === 0
+          ? <div className="empty"><div className="big">🗓</div>No bike runs between {monthLabel(fromMonth)} and {monthLabel(toMonth)}.</div>
+          : <div className="tbl-wrap">
+            <table>
+              <thead><tr><th>Date</th><th style={{ textAlign: 'right' }}>KM Run</th><th>Customers Visited</th><th style={{ textAlign: 'right' }}>Calls</th><th style={{ textAlign: 'right' }}>Payments</th></tr></thead>
+              <tbody>
+                {dayKeys.map((k, i) => (
+                  <tr key={k} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
+                    <td className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{fmtDate(k)}</td>
+                    <td className="money" style={{ textAlign: 'right' }}>{byDay[k].km} km</td>
+                    <td>{byDay[k].visited.length ? byDay[k].visited.join(', ') : <span style={{ color: 'var(--muted)' }}>no visits</span>}</td>
+                    <td style={{ textAlign: 'right' }}>{byDay[k].calls}</td>
+                    <td style={{ textAlign: 'right' }}>{byDay[k].paid}/{byDay[k].stops}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr>
+                <td>TOTAL RUN — {monthPeriodLabel}</td>
+                <td className="money" style={{ textAlign: 'right' }}>{mKm} km</td>
+                <td>{mVisitedCount} customers visited</td>
+                <td></td><td></td>
+              </tr></tfoot>
+            </table>
+          </div>}
+      </>)}
     </div>
   );
 }
@@ -1731,86 +1491,47 @@ function People({ people, onAdd, onDelete, onUpdate, user }) {
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(null);
+  const { apply, Th } = useSort('name', 'asc');
   const types = ['Employee', 'Loader', 'Customer', 'Relation'];
   const counts = t => people.filter(p => p.type === t).length;
-  const list = people.filter(p => tab === 'All' || p.type === tab).sort((a, b) => a.name.localeCompare(b.name));
-
+  const filteredPeople = people.filter(p => tab === 'All' || p.type === tab);
+  const list = apply(filteredPeople, { name: p => p.name, type: p => p.type, role: p => p.role || '', phone: p => p.phone || '', joined: p => p.joined });
   const submit = async e => {
     e.preventDefault();
     if (!name.trim()) return setErr('Name is required.');
-    setErr('');
-    setSaving(true);
+    setErr(''); setSaving(true);
     try {
       const { data, error } = await supabase.from('people').insert({ name: name.trim(), type, phone: phone.trim(), role: role.trim(), joined }).select().single();
       if (error) throw error;
-      onAdd(data);
-      setName(''); setPhone(''); setRole('');
-    } catch (e2) {
-      setErr(e2.message || 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
+      onAdd(data); setName(''); setPhone(''); setRole('');
+    } catch (e2) { setErr(e2.message || 'Failed to save'); } finally { setSaving(false); }
   };
-
-  return (
-    <>
-      {canEdit(user, 'people') && (
-        <form className="card rise" style={{ padding: 24, marginBottom: 16 }} onSubmit={submit}>
-          <div className="card-h" style={{ padding: '0 0 16px', marginBottom: 16 }}><h3>New Entry — Loader / Customer / Employee / Relation</h3></div>
-          {err && <div className="err">{err}</div>}
-          <div className="form-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-            <div className="field"><label>Full Name</label><input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Akram Din" /></div>
-            <div className="field"><label>Category</label>
-              <select value={type} onChange={e => setType(e.target.value)}>{types.map(t => <option key={t}>{t}</option>)}</select></div>
-            <div className="field"><label>Phone</label><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="03xx xxxxxxx" /></div>
-            <div className="field"><label>Role / Detail</label><input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Loading Crew · A" /></div>
-            <div className="field"><label>Joined</label><input type="date" value={joined} onChange={e => setJoined(e.target.value)} /></div>
-            <div className="field" style={{ justifyContent: 'flex-end' }}><button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add to Register'}</button></div>
-          </div>
-        </form>
-      )}
-      <div className="card rise">
-        <div className="tabs">
-          {['All', ...types].map(t => (
-            <button key={t} className={'tab' + (tab === t ? ' active' : '')} onClick={() => setTab(t)}>
-              {t}<span className="n">{t === 'All' ? people.length : counts(t)}</span>
-            </button>
-          ))}
-        </div>
-        {list.length === 0
-          ? <div className="empty"><div className="big">👥</div>Nothing in this category yet.</div>
-          : <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>Name</th><th>Category</th><th>Role / Detail</th><th>Phone</th><th>Joined</th><th></th></tr></thead>
-              <tbody>
-                {list.map((p, i) => (
-                  <tr key={p.id} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
-                    <td style={{ fontWeight: 600 }}>{p.name}</td>
-                    <td><span className={'badge b-' + p.type}>{p.type}</span></td>
-                    <td style={{ color: 'var(--muted)' }}>{p.role || '—'}</td>
-                    <td className="mono" style={{ fontSize: 12.5 }}>{p.phone || '—'}</td>
-                    <td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(p.joined)}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {canEdit(user, 'people') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(p)}>{I.edit}</button>}
-                      {canDelete(user, 'people') && <button className="icon-btn" title="Remove" onClick={async () => {
-                        if (window.confirm('Remove ' + p.name + '?')) {
-                          const { error } = await supabase.from('people').delete().eq('id', p.id);
-                          if (error) alert('Cannot delete: ' + error.message); else onDelete(p.id);
-                        }
-                      }}>{I.trash}</button>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>}
-        {editing && (
-          <Modal title={'Edit — ' + editing.name} onClose={() => setEditing(null)}>
-            <EditPersonForm rec={editing} types={types} onSave={onUpdate} onClose={() => setEditing(null)} />
-          </Modal>
-        )}
-      </div>
-    </>
+  return (<>
+    {canEdit(user, 'people') && (<form className="card rise" style={{ padding: 24, marginBottom: 16 }} onSubmit={submit}>
+      <div className="card-h" style={{ padding: '0 0 16px', marginBottom: 16 }}><h3>New Entry — Loader / Customer / Employee / Relation</h3></div>
+      {err && <div className="err">{err}</div>}
+      <div className="form-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+        <div className="field"><label>Full Name</label><input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Akram Din" /></div>
+        <div className="field"><label>Category</label><select value={type} onChange={e => setType(e.target.value)}>{types.map(t => <option key={t}>{t}</option>)}</select></div>
+        <div className="field"><label>Phone</label><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="03xx xxxxxxx" /></div>
+        <div className="field"><label>Role / Detail</label><input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Loading Crew · A" /></div>
+        <div className="field"><label>Joined</label><input type="date" value={joined} onChange={e => setJoined(e.target.value)} /></div>
+        <div className="field" style={{ justifyContent: 'flex-end' }}><button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add to Register'}</button></div>
+      </div></form>)}
+    <div className="card rise">
+      <div className="tabs">{['All', ...types].map(t => (<button key={t} className={'tab' + (tab === t ? ' active' : '')} onClick={() => setTab(t)}>{t}<span className="n">{t === 'All' ? people.length : counts(t)}</span></button>))}</div>
+      {list.length === 0 ? <div className="empty"><div className="big">👥</div>Nothing in this category yet.</div>
+        : <div className="tbl-wrap"><table>
+            <thead><tr><Th k="name">Name</Th><Th k="type">Category</Th><Th k="role">Role / Detail</Th><Th k="phone">Phone</Th><Th k="joined">Joined</Th><th></th></tr></thead>
+            <tbody>{list.map((p, i) => (<tr key={p.id} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
+              <td style={{ fontWeight: 600 }}>{p.name}</td><td><span className={'badge b-' + p.type}>{p.type}</span></td>
+              <td style={{ color: 'var(--muted)' }}>{p.role || '—'}</td><td className="mono" style={{ fontSize: 12.5 }}>{p.phone || '—'}</td><td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(p.joined)}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>
+                {canEdit(user, 'people') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(p)}>{I.edit}</button>}
+                {canDelete(user, 'people') && <button className="icon-btn" title="Remove" onClick={async () => { if (window.confirm('Remove ' + p.name + '?')) { const { error } = await supabase.from('people').delete().eq('id', p.id); if (error) alert('Cannot delete: ' + error.message); else onDelete(p.id); } }}>{I.trash}</button>}
+              </td></tr>))}</tbody></table></div>}
+      {editing && <Modal title={'Edit — ' + editing.name} onClose={() => setEditing(null)}><EditPersonForm rec={editing} types={types} onSave={onUpdate} onClose={() => setEditing(null)} /></Modal>}
+    </div></>
   );
 }
 
@@ -1826,20 +1547,15 @@ function EditPersonForm({ rec, types, onSave, onClose }) {
     try {
       const { error } = await supabase.from('people').update(f).eq('id', rec.id);
       if (error) throw error;
-      onSave({ ...rec, ...f });
-      onClose();
-    } catch (e2) {
-      setErr(e2.message || 'Failed to update');
-      setSaving(false);
-    }
+      onSave({ ...rec, ...f }); onClose();
+    } catch (e2) { setErr(e2.message || 'Failed to update'); setSaving(false); }
   };
   return (
     <form onSubmit={submit}>
       {err && <div className="err">{err}</div>}
       <div className="form-grid">
         <div className="field"><label>Full Name</label><input value={f.name} onChange={e => set('name', e.target.value)} /></div>
-        <div className="field"><label>Category</label>
-          <select value={f.type} onChange={e => set('type', e.target.value)}>{types.map(t => <option key={t}>{t}</option>)}</select></div>
+        <div className="field"><label>Category</label><select value={f.type} onChange={e => set('type', e.target.value)}>{types.map(t => <option key={t}>{t}</option>)}</select></div>
         <div className="field"><label>Phone</label><input value={f.phone} onChange={e => set('phone', e.target.value)} /></div>
         <div className="field"><label>Role / Detail</label><input value={f.role} onChange={e => set('role', e.target.value)} /></div>
         <div className="field"><label>Joined</label><input type="date" value={f.joined} onChange={e => set('joined', e.target.value)} /></div>
@@ -1861,43 +1577,24 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [printRec, setPrintRec] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        supabase.from('profiles').select('*').eq('id', session.user.id).single()
-          .then(({ data: profile }) => {
-            if (profile && profile.active) {
-              setUser({ ...profile, authId: session.user.id, email: session.user.email });
-            }
-            setLoading(false);
-          });
-      } else {
-        setLoading(false);
-      }
+        supabase.from('profiles').select('*').eq('id', session.user.id).single().then(({ data: profile }) => {
+          if (profile && profile.active) setUser({ ...profile, authId: session.user.id, email: session.user.email });
+          setLoading(false);
+        });
+      } else setLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') setUser(null);
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') setUser(null); });
     return () => subscription.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (user) fetchAll().then(setData);
-  }, [user]);
-
+  useEffect(() => { if (user) fetchAll().then(setData); }, [user]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3400); return () => clearTimeout(t); }, [toast]);
-
   const notify = (msg, type = 'ok') => setToast({ msg, type, id: uid() });
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  };
-
+  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); };
   if (loading) return <div className="login-page"><div className="login-card"><h2>Loading…</h2></div></div>;
   if (!user) return <LoginPage onLogin={setUser} />;
-
   const addAdvance = (rec, andPrint) => { setData(d => ({ ...d, advances: [...d.advances, rec] })); notify('Advance ' + rec.ed_no + ' saved'); if (andPrint) setPrintRec(rec); };
   const updateAdvance = rec => { setData(d => ({ ...d, advances: d.advances.map(a => a.id === rec.id ? rec : a) })); notify('Voucher updated'); };
   const delAdvance = id => { setData(d => ({ ...d, advances: d.advances.filter(a => a.id !== id) })); notify('Entry deleted', 'warn'); };
@@ -1915,7 +1612,6 @@ export default function App() {
   const delExpense = id => { setData(d => ({ ...d, expenses: d.expenses.filter(r => r.id !== id) })); notify('Expense deleted', 'warn'); };
   const addCategory = c => { setData(d => ({ ...d, categories: [...d.categories, c] })); notify('Expense type "' + c.name + '" added'); };
   const delCategory = id => { setData(d => ({ ...d, categories: d.categories.filter(c => c.id !== id) })); notify('Expense type deleted', 'warn'); };
-
   return (
     <div className="app">
       <Sidebar view={view} setView={setView} people={data.people} advances={data.advances} freights={data.freights} user={user} onLogout={handleLogout} open={menuOpen} onClose={() => setMenuOpen(false)} />
