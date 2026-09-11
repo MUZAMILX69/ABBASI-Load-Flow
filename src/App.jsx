@@ -1461,8 +1461,26 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [q, setQ] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const customers = people.filter(p => p.type === 'Customer' || p.type === 'Relation');
-  const recent = [...visits].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 6);
+
+  const filteredRuns = useMemo(() => {
+    return [...visits]
+      .filter(v => !fromDate || v.visit_date >= fromDate)
+      .filter(v => !toDate || v.visit_date <= toDate)
+      .filter(v => {
+        if (!q) return true;
+        const hay = (v.visit_date + ' ' + String(v.bike_km) + ' ' +
+          (v.visit_entries || []).map(x => x.customer + ' ' + (x.note || '')).join(' ')).toLowerCase();
+        return hay.includes(q.toLowerCase());
+      })
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  }, [visits, q, fromDate, toDate]);
+
+  const totalKm = filteredRuns.reduce((s, v) => s + Number(v.bike_km || 0), 0);
+  const totalStops = filteredRuns.reduce((s, v) => s + (v.visit_entries ? v.visit_entries.length : 0), 0);
 
   const submit = async e => {
     e.preventDefault();
@@ -1501,14 +1519,35 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
           <button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Visit Run'}</button>
         </div>
       </form>
+
       <div className="card">
-        <div className="card-h"><h3>Recent runs</h3><span className="tag">{visits.length} total</span></div>
+        <div className="card-h"><h3>Recent Runs</h3><span className="tag">{filteredRuns.length} of {visits.length} runs</span></div>
+
+        <div className="filters no-print" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+          <div className="search-box">{I.search}<input placeholder="Search customer, note, date…" value={q} onChange={e => setQ(e.target.value)} /></div>
+        </div>
+        <div className="filters no-print" style={{ paddingTop: 8 }}>
+          <div className="field" style={{ margin: 0, minWidth: 140 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
+          <div className="field" style={{ margin: 0, minWidth: 140 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
+          {(fromDate || toDate || q) && <button className="chip" onClick={() => { setQ(''); setFromDate(''); setToDate(''); }}>Clear</button>}
+        </div>
+
+        <div className="sumbar">
+          <div className="sumbox hot"><div className="k">Total KM</div><div className="v">{totalKm} km</div></div>
+          <div className="sumbox"><div className="k">Runs</div><div className="v">{filteredRuns.length}</div></div>
+          <div className="sumbox"><div className="k">Total Stops</div><div className="v">{totalStops}</div></div>
+        </div>
+
         <div className="rlist">
-          {recent.length === 0 && <div className="empty">No runs logged yet.</div>}
-          {recent.map(v => (
+          {filteredRuns.length === 0 && <div className="empty"><div className="big">🛵</div>No runs match your search.</div>}
+          {filteredRuns.map(v => (
             <div className="rrow" key={v.id}>
               <span className="km-pill">{v.bike_km} km</span>
-              <div><div className="nm">{fmtDate(v.visit_date)}</div><div className="dt">{v.visit_entries ? v.visit_entries.length : 0} stops</div></div>
+              <div>
+                <div className="nm">{fmtDate(v.visit_date)}</div>
+                <div className="dt">{v.visit_entries ? v.visit_entries.length : 0} stops · {v.visit_entries ? v.visit_entries.filter(x => x.contact_type === 'Visited').length : 0} visited</div>
+              </div>
+              <div className="amt-r">{v.visit_entries ? v.visit_entries.filter(x => x.payment === 'Received').length : 0}/{v.visit_entries ? v.visit_entries.length : 0} paid</div>
               {canEdit(user, 'visit') && <button className="icon-btn edit" title="Edit run" onClick={() => setEditing(v)}>{I.edit}</button>}
               {canDelete(user, 'visit') && <button className="icon-btn" title="Delete run" onClick={async () => {
                 if (window.confirm('Delete this visit run?')) {
@@ -1520,6 +1559,7 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
           ))}
         </div>
       </div>
+
       {editing && (
         <Modal title={'Edit Visit Run — ' + fmtDate(editing.visit_date)} wide onClose={() => setEditing(null)}>
           <EditVisitForm rec={editing} customers={customers} onSave={onUpdate} onClose={() => setEditing(null)} />
