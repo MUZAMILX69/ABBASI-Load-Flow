@@ -435,3 +435,4 @@ tfoot td.money{font-size:14px}
 .perm-tag.full{background:var(--amber-soft);color:var(--amber-deep)}
 .user-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .user-card-foot .btn{min-width:110px;justify-content:center}
+.chip.active-chip{background:var(--petrol);color:#fff;border-color:var(--petrol)}
