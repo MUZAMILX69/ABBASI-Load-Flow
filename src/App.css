@@ -545,9 +545,9 @@ tfoot td.money{font-size:14px}
 .search-select-ph{font-size:14.5px;color:#9AABA0}
 .search-select-clear{background:none;border:none;cursor:pointer;color:#9AABA0;padding:2px;border-radius:50%;display:grid;place-items:center}
 .search-select-clear:hover{color:var(--coral);background:#FBEDEC}
-.search-select-backdrop{position:fixed;inset:0;z-index:80}
+.search-select-backdrop{position:fixed;inset:0;z-index:9998}
 .search-select-dropdown{
-  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:90;
+  position:absolute;z-index:9999;
   background:#fff;border:1.5px solid var(--teal);border-radius:12px;
   box-shadow:0 12px 32px rgba(8,30,26,.18);overflow:hidden;
   animation:toastin .2s ease;
@@ -572,3 +572,11 @@ tfoot td.money{font-size:14px}
 .search-select-empty{padding:20px;text-align:center;color:var(--muted);font-size:13px}
 /* Hide icons inside dashboard route-strip buttons */
 .route-strip .btn svg{display:none !important}
+/* Recent Runs full width below form */
+.card.rise .rlist{max-height:500px;overflow-y:auto}
+.card.rise .sumbar{flex-wrap:wrap}
+.card.rise .sumbox{flex:1 1 20%;min-width:100px}
+/* Fix SearchSelect dropdown inside cards */
+.card{overflow:visible}
+.search-select-dropdown{z-index:999}
+.search-select-backdrop{z-index:998}
