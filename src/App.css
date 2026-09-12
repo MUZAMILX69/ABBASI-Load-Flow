@@ -436,3 +436,101 @@ tfoot td.money{font-size:14px}
 .user-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .user-card-foot .btn{min-width:110px;justify-content:center}
 .chip.active-chip{background:var(--petrol);color:#fff;border-color:var(--petrol)}
+/* ===== RECEIPT PRINTER VOUCHER ===== */
+.voucher-receipt{
+  width:80mm;
+  max-width:80mm;
+  background:#fff;
+  padding:6mm 4mm;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;
+  color:#000;
+  box-shadow:0 4px 20px rgba(0,0,0,.3);
+  border-radius:4px;
+}
+.voucher-receipt .vr-head{
+  text-align:center;
+  border-bottom:2px dashed #000;
+  padding-bottom:6px;
+  margin-bottom:8px;
+}
+.voucher-receipt .vr-brand{
+  font-family:'Bricolage Grotesque',sans-serif;
+  font-weight:800;
+  font-size:16px;
+  letter-spacing:1px;
+}
+.voucher-receipt .vr-sub{
+  font-size:9px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  margin-top:2px;
+}
+.voucher-receipt .vr-ed{
+  font-size:22px;
+  font-weight:700;
+  margin:8px 0;
+  text-align:center;
+  letter-spacing:2px;
+}
+.voucher-receipt .vr-row{
+  display:flex;
+  justify-content:space-between;
+  padding:3px 0;
+  border-bottom:1px dotted #ccc;
+}
+.voucher-receipt .vr-row .vr-k{
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.1em;
+  color:#555;
+}
+.voucher-receipt .vr-row .vr-v{
+  font-weight:700;
+  text-align:right;
+  max-width:55%;
+}
+.voucher-receipt .vr-amount{
+  text-align:center;
+  font-size:24px;
+  font-weight:800;
+  padding:10px 0;
+  margin:8px 0;
+  border-top:2px dashed #000;
+  border-bottom:2px dashed #000;
+}
+.voucher-receipt .vr-signs{
+  display:flex;
+  justify-content:space-between;
+  margin-top:20px;
+  padding-top:4px;
+}
+.voucher-receipt .vr-signs span{
+  border-top:1px solid #000;
+  padding-top:4px;
+  font-size:8px;
+  text-align:center;
+  width:28%;
+}
+.voucher-receipt .vr-foot{
+  text-align:center;
+  font-size:8px;
+  color:#888;
+  margin-top:12px;
+  border-top:1px dashed #ccc;
+  padding-top:6px;
+}
+
+@media print{
+  body:has(.voucher-receipt) *{visibility:hidden}
+  body:has(.voucher-receipt) .voucher-receipt,
+  body:has(.voucher-receipt) .voucher-receipt *{visibility:visible}
+  body:has(.voucher-receipt) .voucher-receipt{
+    position:fixed;
+    left:0;top:0;
+    width:80mm;
+    margin:0;padding:4mm;
+    box-shadow:none;border-radius:0;
+  }
+  @page{size:80mm auto;margin:0}
+}
