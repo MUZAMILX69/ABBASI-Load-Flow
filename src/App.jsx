@@ -1319,33 +1319,70 @@ function VisitReports({ visits }) {
   const [toDate, setToDate] = useState(today());
   const [fromMonth, setFromMonth] = useState(thisMonthKey());
   const [toMonth, setToMonth] = useState(thisMonthKey());
+  const [groupByDate, setGroupByDate] = useState(false);
+  const [groupBySuccess, setGroupBySuccess] = useState(false);
+  const { apply, Th } = useSort('', '');
 
-  /* ---- Daily Report: filter by date range ---- */
   const dayRuns = useMemo(() => [...visits]
     .filter(v => v.visit_date >= fromDate && v.visit_date <= toDate)
     .sort((a, b) => a.visit_date.localeCompare(b.visit_date)), [visits, fromDate, toDate]);
 
-  const dayStops = dayRuns.flatMap(v => v.visit_entries || []);
-  const dKm = dayRuns.reduce((s, v) => s + Number(v.bike_km || 0), 0);
-  const dVisited = dayStops.filter(x => x.contact_type === 'Visited');
-  const dCalls = dayStops.filter(x => x.contact_type === 'Phone Call');
-  const dSuccess = dayStops.filter(x => x.success);
-  const dPaid = dayStops.filter(x => x.payment === 'Received');
+  const allStops = useMemo(() => dayRuns.flatMap(v => (v.visit_entries || []).map(x => ({ ...x, runDate: v.visit_date, runKm: v.bike_km }))), [dayRuns]);
 
-  /* ---- Monthly Report: filter by month range ---- */
+  const sortedStops = apply(allStops, {
+    customer: x => x.customer,
+    contact_type: x => x.contact_type,
+    payment: x => x.payment,
+    time: x => (Number(x.time_value) || 0) * (x.time_unit === 'hrs' ? 60 : 1),
+    note: x => x.note || '',
+    result: x => x.success ? 0 : 1,
+    date: x => x.runDate
+  });
+
+  const groupedStops = useMemo(() => {
+    if (!groupByDate && !groupBySuccess) return [{ label: null, items: sortedStops, isHeader: false, indent: false }];
+    let buckets = [{ key: '__all__', items: sortedStops }];
+    if (groupByDate) {
+      const map = {};
+      sortedStops.forEach(x => { const d = x.runDate || 'Unknown'; if (!map[d]) map[d] = []; map[d].push(x); });
+      buckets = Object.keys(map).sort().map(d => ({ key: d, items: map[d] }));
+    }
+    const result = [];
+    buckets.forEach(bucket => {
+      const dateLabel = groupByDate ? (() => {
+        const it = bucket.items;
+        const km = it[0]?.runKm || 0;
+        const vis = it.filter(x => x.contact_type === 'Visited').length;
+        const suc = it.filter(x => x.success).length;
+        const paid = it.filter(x => x.payment === 'Received').length;
+        return '📅 ' + fmtDate(bucket.key) + ' · ' + km + ' km · ' + it.length + ' stops · ' + vis + ' visited · ' + suc + ' success · ' + paid + '/' + it.length + ' paid';
+      })() : null;
+      if (!groupBySuccess) {
+        result.push({ label: dateLabel, items: bucket.items, isHeader: false, indent: false });
+      } else {
+        const success = bucket.items.filter(x => x.success);
+        const notSuccess = bucket.items.filter(x => !x.success);
+        if (dateLabel) result.push({ label: dateLabel, items: [], isHeader: true, indent: false });
+        result.push({ label: '✓ Success (' + success.length + ')', items: success, isHeader: false, indent: !!dateLabel });
+        result.push({ label: '✗ Not Success (' + notSuccess.length + ')', items: notSuccess, isHeader: false, indent: !!dateLabel });
+      }
+    });
+    return result;
+  }, [sortedStops, groupByDate, groupBySuccess]);
+
+  const dKm = dayRuns.reduce((s, v) => s + Number(v.bike_km || 0), 0);
+  const dVisited = allStops.filter(x => x.contact_type === 'Visited');
+  const dCalls = allStops.filter(x => x.contact_type === 'Phone Call');
+  const dSuccess = allStops.filter(x => x.success);
+  const dPaid = allStops.filter(x => x.payment === 'Received');
+
   const monthRuns = useMemo(() => [...visits]
     .filter(v => v.visit_date && v.visit_date.slice(0, 7) >= fromMonth && v.visit_date.slice(0, 7) <= toMonth)
     .sort((a, b) => a.visit_date.localeCompare(b.visit_date)), [visits, fromMonth, toMonth]);
-
   const byDay = monthRuns.reduce((m, v) => {
     m[v.visit_date] = m[v.visit_date] || { km: 0, visited: [], calls: 0, paid: 0, stops: 0 };
     m[v.visit_date].km += Number(v.bike_km || 0);
-    (v.visit_entries || []).forEach(x => {
-      m[v.visit_date].stops++;
-      if (x.contact_type === 'Visited') m[v.visit_date].visited.push(x.customer);
-      else m[v.visit_date].calls++;
-      if (x.payment === 'Received') m[v.visit_date].paid++;
-    });
+    (v.visit_entries || []).forEach(x => { m[v.visit_date].stops++; if (x.contact_type === 'Visited') m[v.visit_date].visited.push(x.customer); else m[v.visit_date].calls++; if (x.payment === 'Received') m[v.visit_date].paid++; });
     return m;
   }, {});
   const dayKeys = Object.keys(byDay).sort();
@@ -1354,17 +1391,70 @@ function VisitReports({ visits }) {
   const mTotalStops = dayKeys.reduce((s, k) => s + byDay[k].stops, 0);
   const mTotalPaid = dayKeys.reduce((s, k) => s + byDay[k].paid, 0);
 
-  /* ---- Quick buttons ---- */
   const setThisMonth = () => { setFromMonth(thisMonthKey()); setToMonth(thisMonthKey()); setFromDate(today().slice(0, 8) + '01'); setToDate(today()); };
-  const setLastMonth = () => {
-    const d = new Date(); const p = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-    const k = p.getFullYear() + '-' + String(p.getMonth() + 1).padStart(2, '0');
-    const lastDay = new Date(d.getFullYear(), d.getMonth(), 0).toISOString().slice(0, 10);
-    setFromMonth(k); setToMonth(k); setFromDate(k + '-01'); setToDate(lastDay);
-  };
+  const setLastMonth = () => { const d = new Date(); const p = new Date(d.getFullYear(), d.getMonth() - 1, 1); const k = p.getFullYear() + '-' + String(p.getMonth() + 1).padStart(2, '0'); const lastDay = new Date(d.getFullYear(), d.getMonth(), 0).toISOString().slice(0, 10); setFromMonth(k); setToMonth(k); setFromDate(k + '-01'); setToDate(lastDay); };
   const setAllTime = () => { setFromMonth('2020-01'); setToMonth('2099-12'); setFromDate('2020-01-01'); setToDate('2099-12-31'); };
   const periodLabel = fromDate === toDate ? fmtDate(fromDate) : fmtDate(fromDate) + ' → ' + fmtDate(toDate);
   const monthPeriodLabel = fromMonth === toMonth ? monthLabel(fromMonth) : monthLabel(fromMonth) + ' → ' + monthLabel(toMonth);
+  const fmtTime = x => (x.time_value || '—') + ' ' + (x.time_unit === 'hrs' ? 'hr' : 'min');
+
+  const renderGroup = (group, gi) => {
+    const headerColor = group.isHeader ? 'var(--ink)' : group.label && group.label.includes('✓') ? 'var(--teal)' : group.label && group.label.includes('✗') ? 'var(--coral)' : 'var(--ink)';
+    const headerBg = group.isHeader ? '#F4F8F3' : 'transparent';
+    const headerPad = group.indent ? '8px 20px 4px 36px' : '14px 20px 6px';
+    const headerSize = group.isHeader ? 15 : group.indent ? 13 : 14;
+    const headerBorder = !group.indent && gi > 0 && !group.isHeader ? '2px solid var(--line)' : group.isHeader && gi > 0 ? '2px solid var(--petrol)' : 'none';
+    const subtotalLabel = group.label ? group.label.replace(/^[^\w]*/, '') : '';
+    const totalMin = group.items.reduce((s, x) => s + (Number(x.time_value) || 0) * (x.time_unit === 'hrs' ? 60 : 1), 0);
+    const totalPaid = group.items.filter(x => x.payment === 'Received').length;
+
+    return (
+      <div key={gi}>
+        {group.label && (
+          <div style={{ padding: headerPad, fontWeight: group.isHeader ? 800 : 700, fontSize: headerSize, fontFamily: "'Bricolage Grotesque', sans-serif", color: headerColor, background: headerBg, borderTop: headerBorder }}>
+            {group.label}
+          </div>
+        )}
+        {group.items.length > 0 && (
+          <div className="tbl-wrap">
+            <table>
+              <thead><tr>
+                <Th k="customer">Customer</Th>
+                <Th k="contact_type">Visited / Call</Th>
+                <Th k="payment">Payment</Th>
+                <Th k="time">Time Spent</Th>
+                <Th k="note">Note</Th>
+                <Th k="result">Result</Th>
+                <Th k="date">Run Date</Th>
+              </tr></thead>
+              <tbody>
+                {group.items.map((x, i) => (
+                  <tr key={(x.id || '') + '-' + i} style={{ animationDelay: Math.min(i * 20, 300) + 'ms' }}>
+                    <td style={{ fontWeight: 600 }}>{x.customer}</td>
+                    <td><span className={x.contact_type === 'Visited' ? 'badge b-Loader' : 'badge b-Customer'}>{x.contact_type}</span></td>
+                    <td>{x.payment === 'Received' ? <span className="badge b-Employee">Received</span> : <span className="badge b-Loader">Pending</span>}</td>
+                    <td className="mono" style={{ fontSize: 12.5 }}>{fmtTime(x)}</td>
+                    <td style={{ color: 'var(--muted)' }}>{x.note || '—'}</td>
+                    <td><span className={x.success ? 'badge b-Employee' : 'badge b-Relation'}>{x.success ? '✓ Success' : 'Not Success'}</span></td>
+                    <td className="mono" style={{ fontSize: 12 }}>{fmtDate(x.runDate)} · {x.runKm} km</td>
+                  </tr>
+                ))}
+              </tbody>
+              {group.label && !group.isHeader && (
+                <tfoot><tr>
+                  <td colSpan="3">Subtotal — {subtotalLabel}</td>
+                  <td className="money">{totalMin} min total</td>
+                  <td></td>
+                  <td className="money">{totalPaid}/{group.items.length} paid</td>
+                  <td></td>
+                </tr></tfoot>
+              )}
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="card rise">
@@ -1373,113 +1463,98 @@ function VisitReports({ visits }) {
         <button className={'tab' + (tab === 'monthly' ? ' active' : '')} onClick={() => setTab('monthly')}>Monthly Bike Run (KM)</button>
       </div>
 
-      {/* ===== DAILY VISIT REPORT ===== */}
-      {tab === 'daily' && (<>
-        <PrintHead title="Daily Customer Visit Report" meta={`${periodLabel} · ${dKm} km · ${dayStops.length} stops`} />
-        <div className="filters no-print">
-          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
-          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
-          <button className="chip" onClick={setThisMonth}>This Month</button>
-          <button className="chip" onClick={setLastMonth}>Last Month</button>
-          <button className="chip" onClick={setAllTime}>All Time</button>
-          <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayRuns.length} runs found</span>
-          <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
-        </div>
-        <div className="sumbar">
-          <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{dKm} km</div></div>
-          <div className="sumbox"><div className="k">Runs</div><div className="v">{dayRuns.length}</div></div>
-          <div className="sumbox"><div className="k">Customers Visited</div><div className="v">{dVisited.length}</div></div>
-          <div className="sumbox"><div className="k">Phone Calls</div><div className="v">{dCalls.length}</div></div>
-          <div className="sumbox"><div className="k">Successful</div><div className="v">{dSuccess.length}</div></div>
-          <div className="sumbox"><div className="k">Payments Received</div><div className="v">{dPaid.length}</div></div>
-        </div>
-        {dayRuns.length === 0
-          ? <div className="empty"><div className="big">🛵</div>No visit runs between {fmtDate(fromDate)} and {fmtDate(toDate)}.</div>
-          : dayRuns.map(v => {
-              const stops = v.visit_entries || [];
-              const rKm = Number(v.bike_km || 0);
-              const rVisited = stops.filter(x => x.contact_type === 'Visited').length;
-              const rCalls = stops.filter(x => x.contact_type === 'Phone Call').length;
-              const rSuccess = stops.filter(x => x.success).length;
-              const rPaid = stops.filter(x => x.payment === 'Received').length;
-              return (
-                <div key={v.id} className="tbl-wrap" style={{ borderTop: '1px solid var(--line)' }}>
-                  <table>
-                    <thead>
-                      <tr><th colSpan="6" style={{ background: '#F7FAF6' }}>
-                        Run — {fmtDate(v.visit_date)} · <span className="mono">{rKm} km</span>
-                        <span style={{ float: 'right', fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>
-                          {rVisited} visited · {rCalls} calls · {rSuccess} success · {rPaid}/{stops.length} paid
-                        </span>
-                      </th></tr>
-                      <tr><th>Customer</th><th>Contact Type</th><th>Result</th><th>Time Spent</th><th>Payment</th><th>Note</th></tr>
-                    </thead>
-                    <tbody>
-                      {stops.map(x => (
-                        <tr key={x.id}>
-                          <td style={{ fontWeight: 600 }}>{x.customer}</td>
-                          <td><span className={x.contact_type === 'Visited' ? 'badge b-Loader' : 'badge b-Customer'}>{x.contact_type}</span></td>
-                          <td><span className={x.success ? 'badge b-Employee' : 'badge b-Relation'}>{x.success ? '✓ Success' : 'Not Success'}</span></td>
-                          <td className="mono" style={{ fontSize: 12.5 }}>{x.time_value || '—'} {x.time_unit === 'hrs' ? 'hr' : 'min'}</td>
-                          <td>{x.payment === 'Received' ? <span className="badge b-Employee">Received</span> : <span className="badge b-Loader">Pending</span>}</td>
-                          <td style={{ color: 'var(--muted)' }}>{x.note || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })}
-      </>)}
+      {tab === 'daily' && (
+        <>
+          <PrintHead title="Daily Customer Visit Report" meta={`${periodLabel} · ${dKm} km · ${allStops.length} stops`} />
+          <div className="filters no-print">
+            <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
+            <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
+            <button className="chip" onClick={setThisMonth}>This Month</button>
+            <button className="chip" onClick={setLastMonth}>Last Month</button>
+            <button className="chip" onClick={setAllTime}>All Time</button>
+            <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayRuns.length} runs · {allStops.length} stops</span>
+            <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
+          </div>
+          <div className="filters no-print" style={{ borderTop: 'none', paddingTop: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)', alignSelf: 'center' }}>Group:</span>
+            <button className={'chip' + (!groupByDate && !groupBySuccess ? ' active-chip' : '')} onClick={() => { setGroupByDate(false); setGroupBySuccess(false); }}>None</button>
+            <button className={'chip' + (groupByDate ? ' active-chip' : '')} onClick={() => setGroupByDate(v => !v)}>By Date</button>
+            <button className={'chip' + (groupBySuccess ? ' active-chip' : '')} onClick={() => setGroupBySuccess(v => !v)}>By Result</button>
+            {(groupByDate || groupBySuccess) && <span style={{ alignSelf: 'center', fontSize: 11, color: 'var(--teal)', fontWeight: 600 }}>{groupByDate && groupBySuccess ? 'Date + Result' : groupByDate ? 'By Date' : 'By Result'}</span>}
+          </div>
+          <div className="sumbar">
+            <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{dKm} km</div></div>
+            <div className="sumbox"><div className="k">Runs</div><div className="v">{dayRuns.length}</div></div>
+            <div className="sumbox"><div className="k">Visited</div><div className="v">{dVisited.length}</div></div>
+            <div className="sumbox"><div className="k">Calls</div><div className="v">{dCalls.length}</div></div>
+            <div className="sumbox"><div className="k">Successful</div><div className="v">{dSuccess.length}</div></div>
+            <div className="sumbox"><div className="k">Paid</div><div className="v">{dPaid.length}</div></div>
+          </div>
+          {allStops.length === 0
+            ? <div className="empty"><div className="big">🛵</div>No visit stops between {fmtDate(fromDate)} and {fmtDate(toDate)}.</div>
+            : groupedStops.map((group, gi) => renderGroup(group, gi))}
+          {!groupByDate && !groupBySuccess && allStops.length > 0 && (
+            <div className="tbl-wrap" style={{ borderTop: '2px solid var(--petrol)' }}>
+              <table><tfoot><tr>
+                <td colSpan="3">GRAND TOTAL — {periodLabel}</td>
+                <td className="money">{allStops.reduce((s, x) => s + (Number(x.time_value) || 0) * (x.time_unit === 'hrs' ? 60 : 1), 0)} min</td>
+                <td></td>
+                <td className="money">{dPaid.length}/{allStops.length} paid</td>
+                <td className="money">{dSuccess.length} success</td>
+              </tr></tfoot></table>
+            </div>
+          )}
+        </>
+      )}
 
-      {/* ===== MONTHLY BIKE RUN REPORT ===== */}
-      {tab === 'monthly' && (<>
-        <PrintHead title="Monthly Bike Run Report" meta={`${monthPeriodLabel} · Total Run ${mKm} km · ${mVisitedCount} customers visited`} />
-        <div className="filters no-print">
-          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Month</label><input type="month" value={fromMonth} onChange={e => setFromMonth(e.target.value)} /></div>
-          <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Month</label><input type="month" value={toMonth} onChange={e => setToMonth(e.target.value)} /></div>
-          <button className="chip" onClick={setThisMonth}>This Month</button>
-          <button className="chip" onClick={setLastMonth}>Last Month</button>
-          <button className="chip" onClick={setAllTime}>All Time</button>
-          <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayKeys.length} days found</span>
-          <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
-        </div>
-        <div className="sumbar">
-          <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{mKm} km</div></div>
-          <div className="sumbox"><div className="k">Days Active</div><div className="v">{dayKeys.length}</div></div>
-          <div className="sumbox"><div className="k">Customers Visited</div><div className="v">{mVisitedCount}</div></div>
-          <div className="sumbox"><div className="k">Total Stops</div><div className="v">{mTotalStops}</div></div>
-          <div className="sumbox"><div className="k">Payments</div><div className="v">{mTotalPaid}/{mTotalStops}</div></div>
-        </div>
-        {dayKeys.length === 0
-          ? <div className="empty"><div className="big">🗓</div>No bike runs between {monthLabel(fromMonth)} and {monthLabel(toMonth)}.</div>
-          : <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>Date</th><th style={{ textAlign: 'right' }}>KM Run</th><th>Customers Visited</th><th style={{ textAlign: 'right' }}>Calls</th><th style={{ textAlign: 'right' }}>Payments</th></tr></thead>
-              <tbody>
-                {dayKeys.map((k, i) => (
-                  <tr key={k} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
-                    <td className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{fmtDate(k)}</td>
-                    <td className="money" style={{ textAlign: 'right' }}>{byDay[k].km} km</td>
-                    <td>{byDay[k].visited.length ? byDay[k].visited.join(', ') : <span style={{ color: 'var(--muted)' }}>no visits</span>}</td>
-                    <td style={{ textAlign: 'right' }}>{byDay[k].calls}</td>
-                    <td style={{ textAlign: 'right' }}>{byDay[k].paid}/{byDay[k].stops}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr>
-                <td>TOTAL RUN — {monthPeriodLabel}</td>
-                <td className="money" style={{ textAlign: 'right' }}>{mKm} km</td>
-                <td>{mVisitedCount} customers visited</td>
-                <td></td><td></td>
-              </tr></tfoot>
-            </table>
-          </div>}
-      </>)}
+      {tab === 'monthly' && (
+        <>
+          <PrintHead title="Monthly Bike Run Report" meta={`${monthPeriodLabel} · Total Run ${mKm} km · ${mVisitedCount} customers visited`} />
+          <div className="filters no-print">
+            <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Month</label><input type="month" value={fromMonth} onChange={e => setFromMonth(e.target.value)} /></div>
+            <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Month</label><input type="month" value={toMonth} onChange={e => setToMonth(e.target.value)} /></div>
+            <button className="chip" onClick={setThisMonth}>This Month</button>
+            <button className="chip" onClick={setLastMonth}>Last Month</button>
+            <button className="chip" onClick={setAllTime}>All Time</button>
+            <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayKeys.length} days found</span>
+            <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
+          </div>
+          <div className="sumbar">
+            <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{mKm} km</div></div>
+            <div className="sumbox"><div className="k">Days Active</div><div className="v">{dayKeys.length}</div></div>
+            <div className="sumbox"><div className="k">Customers Visited</div><div className="v">{mVisitedCount}</div></div>
+            <div className="sumbox"><div className="k">Total Stops</div><div className="v">{mTotalStops}</div></div>
+            <div className="sumbox"><div className="k">Payments</div><div className="v">{mTotalPaid}/{mTotalStops}</div></div>
+          </div>
+          {dayKeys.length === 0
+            ? <div className="empty"><div className="big">🗓</div>No bike runs between {monthLabel(fromMonth)} and {monthLabel(toMonth)}.</div>
+            : <div className="tbl-wrap">
+              <table>
+                <thead><tr><th>Date</th><th style={{ textAlign: 'right' }}>KM Run</th><th>Customers Visited</th><th style={{ textAlign: 'right' }}>Calls</th><th style={{ textAlign: 'right' }}>Payments</th></tr></thead>
+                <tbody>
+                  {dayKeys.map((k, i) => (
+                    <tr key={k} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
+                      <td className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{fmtDate(k)}</td>
+                      <td className="money" style={{ textAlign: 'right' }}>{byDay[k].km} km</td>
+                      <td>{byDay[k].visited.length ? byDay[k].visited.join(', ') : <span style={{ color: 'var(--muted)' }}>no visits</span>}</td>
+                      <td style={{ textAlign: 'right' }}>{byDay[k].calls}</td>
+                      <td style={{ textAlign: 'right' }}>{byDay[k].paid}/{byDay[k].stops}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot><tr>
+                  <td>TOTAL RUN — {monthPeriodLabel}</td>
+                  <td className="money" style={{ textAlign: 'right' }}>{mKm} km</td>
+                  <td>{mVisitedCount} customers visited</td>
+                  <td></td><td></td>
+                </tr></tfoot>
+              </table>
+            </div>}
+        </>
+      )}
     </div>
   );
 }
-
 /* ============ PEOPLE REGISTER ============ */
 function People({ people, onAdd, onDelete, onUpdate, user }) {
   const [tab, setTab] = useState('All');
