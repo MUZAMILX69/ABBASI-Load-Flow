@@ -615,12 +615,9 @@ function EntryForm({ people, onSave, user }) {
         {err && <div className="err">{err}</div>}
         <div className="form-grid">
           <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
-          <div className="field"><label>Employee / Person</label>
-                      <select value={pid} onChange={e => setPid(e.target.value)}>
-              <option value="">— select employee or loader —</option>
-              {staff.map(p => <option key={p.id} value={p.id}>{p.name} · {p.role || p.type}</option>)}
-            </select>
-            </div>
+            <div className="field"><label>Employee / Loader</label>
+            <SearchSelect options={staff} value={pid} onChange={setPid} placeholder="Type to search employee or loader…" />
+          </div>
           <div className="field"><label>Amount (Rs)</label>
             <input type="number" min="1" placeholder="e.g. 5000" value={amount} onChange={e => setAmount(e.target.value)} />
             <div className="chips">{[1000, 2500, 5000, 10000, 20000].map(v => <button type="button" key={v} className="chip" onClick={() => setAmount(String(v))}>+{v.toLocaleString()}</button>)}</div></div>
@@ -846,6 +843,57 @@ function EmpMonthly({ people, advances, user }) {
   );
 }
 
+function SearchSelect({ options, value, onChange, placeholder, allowFreeText }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const selected = options.find(o => String(o.id) === String(value));
+  const filtered = options.filter(o => !q || (o.name + ' ' + (o.role || '') + ' ' + (o.type || '')).toLowerCase().includes(q.toLowerCase()));
+  const pick = (o) => { onChange(String(o.id)); setQ(''); setOpen(false); };
+  const clear = () => { onChange(''); setQ(''); };
+  const applyFreeText = () => { if (q.trim()) { onChange(q.trim()); setQ(''); setOpen(false); } };
+  return (
+    <div className="search-select" style={{ position: 'relative' }}>
+      <div className="search-select-input" onClick={() => setOpen(true)}>
+        {selected ? (
+          <span className="search-select-val">{selected.name}{selected.role ? ' · ' + selected.role : selected.type ? ' · ' + selected.type : ''}</span>
+        ) : value && !selected && allowFreeText ? (
+          <span className="search-select-val">{value}</span>
+        ) : (
+          <span className="search-select-ph">{placeholder || 'Search…'}</span>
+        )}
+        {(selected || (value && allowFreeText)) && <button type="button" className="search-select-clear" onClick={e => { e.stopPropagation(); clear(); }}>{I.x}</button>}
+      </div>
+      {open && (
+        <>
+          <div className="search-select-backdrop" onClick={() => { if (allowFreeText && q.trim()) applyFreeText(); else { setOpen(false); setQ(''); } }} />
+          <div className="search-select-dropdown">
+            <div className="search-select-search">
+              {I.search}
+              <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder || 'Search…'}
+                onKeyDown={e => { if (e.key === 'Enter' && allowFreeText && q.trim()) { e.preventDefault(); applyFreeText(); } if (e.key === 'Escape') { setOpen(false); setQ(''); } }} />
+              {q && <button type="button" className="search-select-clear" onClick={() => setQ('')}>{I.x}</button>}
+            </div>
+            <div className="search-select-list">
+              {filtered.length === 0 && !allowFreeText && <div className="search-select-empty">No matches found</div>}
+              {filtered.length === 0 && allowFreeText && q.trim() && (
+                <div className="search-select-item" onClick={applyFreeText} style={{ color: 'var(--teal)' }}>
+                  <span className="search-select-name">Use "{q.trim()}"</span>
+                  <span className="search-select-type">new entry</span>
+                </div>
+              )}
+              {filtered.map(o => (
+                <div key={o.id} className={'search-select-item' + (String(o.id) === String(value) ? ' active' : '')} onClick={() => pick(o)}>
+                  <span className="search-select-name">{o.name}</span>
+                  {(o.role || o.type) && <span className="search-select-type">{o.role || o.type}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 /* ============ FREIGHT ENTRY ============ */
 function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
   const loaders = people.filter(p => p.type === 'Loader');
@@ -904,10 +952,9 @@ function FreightEntry({ people, freights, onSave, onUpdate, onDelete, user }) {
         {err && <div className="err">{err}</div>}
         {loaders.length === 0 && <div className="err">No loaders in register yet — add one under People Register.</div>}
         <div className="field"><label>Loader</label>
-          <select value={loaderId} onChange={e => setLoaderId(e.target.value)}>
-            <option value="">— select loader —</option>
-            {loaders.map(l => <option key={l.id} value={l.id}>{l.name} · {l.role || 'Loader'}</option>)}</select></div>
-        <div className="form-grid">
+          <SearchSelect options={loaders} value={loaderId} onChange={setLoaderId} placeholder="Type to search loader…" />
+        </div>       
+       <div className="form-grid">
           <div className="field"><label>Gate Pass No</label><input value={gp} onChange={e => setGp(e.target.value)} placeholder="e.g. GP-1060" /></div>
           <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
           <div className="field"><label>Freight Amount (Rs)</label><input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 7500" /></div>
@@ -1085,7 +1132,9 @@ function EditExpenseForm({ rec, categories, onSave, onClose }) {
       {err && <div className="err">{err}</div>}
       <div className="form-grid">
         <div className="field"><label>Date</label><input type="date" value={f.entry_date} onChange={e => set('entry_date', e.target.value)} /></div>
-        <div className="field"><label>Expense</label><select value={f.category_id} onChange={e => set('category_id', Number(e.target.value))}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div className="field"><label>Expense</label>
+          <SearchSelect options={categories.map(c => ({ id: c.id, name: c.name, type: '' }))} value={String(f.category_id)} onChange={v => set('category_id', Number(v))} placeholder="Type to search expense type…" />
+        </div>
         <div className="field"><label>Amount (Rs)</label><input type="number" min="1" value={f.amount} onChange={e => set('amount', e.target.value)} /></div>
       </div>
       <div className="field"><label>Detail</label><input value={f.detail} onChange={e => set('detail', e.target.value)} /></div>
@@ -1157,7 +1206,9 @@ function ExpensePage({ expenses, categories, user, onSave, onUpdate, onDelete, o
           {err && <div className="err">{err}</div>}
           <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
             <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
-            <div className="field"><label>Expense</label><select value={catId} onChange={e => setCatId(e.target.value)}><option value="">— select expense type —</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div className="field"><label>Expense</label>
+              <SearchSelect options={categories.map(c => ({ id: c.id, name: c.name, type: '' }))} value={catId} onChange={setCatId} placeholder="Type to search expense type…" />
+            </div>
             <div className="field"><label>Amount (Rs)</label><input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 2500" /></div>
           </div>
           <div className="field"><label>Detail</label><input value={detail} onChange={e => setDetail(e.target.value)} placeholder="e.g. Bike fuel for Lahore run…" /></div>
@@ -1219,18 +1270,19 @@ function VisitRowsEditor({ lines, setLines, customers }) {
   const addLine = () => setLines(ls => [...ls, blankLine()]);
   const rmLine = id => setLines(ls => ls.length > 1 ? ls.filter(l => l.id !== id) : ls);
   return (<>
-    <datalist id="custList">{customers.map(c => <option key={c.id} value={c.name} />)}</datalist>
-    <label className="field-label-sec">Customer stops on this run</label>
-    {lines.map(l => (<div className="vrow" key={l.id}>
-      <input list="custList" placeholder="Customer" value={l.customer} onChange={e => setLine(l.id, 'customer', e.target.value)} />
-      <select value={l.contact_type} onChange={e => setLine(l.id, 'contact_type', e.target.value)}><option>Visited</option><option>Phone Call</option></select>
+     <label className="field-label-sec">Customer stops on this run</label>
+    {lines.map(l => {
+      const matched = customers.find(c => c.name === l.customer);
+      return (<div className="vrow" key={l.id}>
+      <SearchSelect options={customers} value={matched ? String(matched.id) : ''} onChange={v => { const c = customers.find(x => String(x.id) === v); if (c) setLine(l.id, 'customer', c.name); else setLine(l.id, 'customer', v); }} placeholder="Search customer…" allowFreeText={true} />     <select value={l.contact_type} onChange={e => setLine(l.id, 'contact_type', e.target.value)}><option>Visited</option><option>Phone Call</option></select>
       <select value={String(l.success)} onChange={e => setLine(l.id, 'success', e.target.value === 'true')}><option value="true">Success</option><option value="false">Not Success</option></select>
       <div className="time-pair"><input type="number" min="0" placeholder="Time" value={l.time_value} onChange={e => setLine(l.id, 'time_value', e.target.value)} />
         <select value={l.time_unit} onChange={e => setLine(l.id, 'time_unit', e.target.value)}><option value="mins">mins</option><option value="hrs">hrs</option></select></div>
       <select value={l.payment} onChange={e => setLine(l.id, 'payment', e.target.value)}><option value="Received">Payment Received</option><option value="Not Received">Payment Pending</option></select>
       <input placeholder="Note" value={l.note} onChange={e => setLine(l.id, 'note', e.target.value)} />
-      <button type="button" className="icon-btn" onClick={() => rmLine(l.id)} title="Remove row">{I.trash}</button>
-    </div>))}
+            <button type="button" className="icon-btn" onClick={() => rmLine(l.id)} title="Remove row">{I.trash}</button>
+    </div>);
+    })}
     <button type="button" className="btn ghost small" onClick={addLine}>{I.plus} Add Stop</button>
   </>);
 }
