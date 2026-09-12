@@ -570,3 +570,5 @@ tfoot td.money{font-size:14px}
 .search-select-type{font-size:11.5px;color:var(--muted);background:#F0F3EE;padding:2px 8px;border-radius:10px}
 .search-select-item.active .search-select-type{background:rgba(14,110,92,.12);color:var(--teal)}
 .search-select-empty{padding:20px;text-align:center;color:var(--muted);font-size:13px}
+/* Hide icons inside dashboard route-strip buttons */
+.route-strip .btn svg{display:none !important}
