@@ -846,14 +846,26 @@ function EmpMonthly({ people, advances, user }) {
 function SearchSelect({ options, value, onChange, placeholder, allowFreeText }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+  const inputRef = useState(null);
+  const ref = useMemo(() => ({ current: null }), []);
   const selected = options.find(o => String(o.id) === String(value));
   const filtered = options.filter(o => !q || (o.name + ' ' + (o.role || '') + ' ' + (o.type || '')).toLowerCase().includes(q.toLowerCase()));
   const pick = (o) => { onChange(String(o.id)); setQ(''); setOpen(false); };
   const clear = () => { onChange(''); setQ(''); };
   const applyFreeText = () => { if (q.trim()) { onChange(q.trim()); setQ(''); setOpen(false); } };
+
+  const openDropdown = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX, width: rect.width });
+    }
+    setOpen(true);
+  };
+
   return (
-    <div className="search-select" style={{ position: 'relative' }}>
-      <div className="search-select-input" onClick={() => setOpen(true)}>
+    <div className="search-select" ref={ref} style={{ position: 'relative' }}>
+      <div className="search-select-input" onClick={openDropdown}>
         {selected ? (
           <span className="search-select-val">{selected.name}{selected.role ? ' · ' + selected.role : selected.type ? ' · ' + selected.type : ''}</span>
         ) : value && !selected && allowFreeText ? (
@@ -863,10 +875,10 @@ function SearchSelect({ options, value, onChange, placeholder, allowFreeText }) 
         )}
         {(selected || (value && allowFreeText)) && <button type="button" className="search-select-clear" onClick={e => { e.stopPropagation(); clear(); }}>{I.x}</button>}
       </div>
-      {open && (
+      {open && createPortal(
         <>
           <div className="search-select-backdrop" onClick={() => { if (allowFreeText && q.trim()) applyFreeText(); else { setOpen(false); setQ(''); } }} />
-          <div className="search-select-dropdown">
+          <div className="search-select-dropdown" style={{ position: 'absolute', top: pos.top, left: pos.left, width: pos.width }}>
             <div className="search-select-search">
               {I.search}
               <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder || 'Search…'}
@@ -889,7 +901,8 @@ function SearchSelect({ options, value, onChange, placeholder, allowFreeText }) 
               ))}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
@@ -1321,8 +1334,8 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
     } catch (e2) { setErr(e2.message || 'Failed to save'); } finally { setSaving(false); }
   };
   return (
-    <div className="grid-2 rise" style={{ alignItems: 'start' }}>
-      <form className="card" style={{ padding: 24 }} onSubmit={submit}>
+        <div>
+      <form className="card rise" style={{ padding: 24, marginBottom: 16 }} onSubmit={submit}>
         <div className="card-h" style={{ padding: '0 0 16px', marginBottom: 16 }}><h3>Daily Customer Visit Run</h3><span className="tag">KM run · stops</span></div>
         {err && <div className="err">{err}</div>}
         <div className="form-grid">
@@ -1331,8 +1344,8 @@ function VisitEntry({ people, visits, onSave, onUpdate, onDelete, user }) {
         </div>
         <VisitRowsEditor lines={lines} setLines={setLines} customers={customers} />
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}><button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Visit Run'}</button></div>
-      </form>
-      <div className="card">
+            </form>
+      <div className="card rise">
         <div className="card-h"><h3>Recent Runs</h3><span className="tag">{filteredRuns.length} of {visits.length} runs</span></div>
         <div className="filters no-print" style={{ borderBottom: 'none', paddingBottom: 0 }}>
           <div className="search-box">{I.search}<input placeholder="Search customer, note, date…" value={q} onChange={e => setQ(e.target.value)} /></div></div>
