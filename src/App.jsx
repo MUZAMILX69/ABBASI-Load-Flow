@@ -21,7 +21,7 @@ const fmtDate = iso => {
   catch { return iso || '—'; }
 };
 const monthLabel = m => new Date(m + '-01T00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-const edNo = n => 'ED-' + String(n).padStart(3, '0');
+const edNo = n => 'EA-' + String(n).padStart(3, '0');
 const uid = () => Date.now() + Math.floor(Math.random() * 999);
 
 /* ============ sortable table hook ============ */
@@ -73,6 +73,7 @@ const I = {
   plus: <svg width="16" height="16" viewBox="0 0 24 24" {...S}><path d="M12 5v14M5 12h14"/></svg>,
   search: <svg width="16" height="16" viewBox="0 0 24 24" {...S}><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>,
   print: <svg width="16" height="16" viewBox="0 0 24 24" {...S}><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/></svg>,
+  printCard: <svg width="16" height="16" viewBox="0 0 24 24" {...S}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>,
   dl: <svg width="16" height="16" viewBox="0 0 24 24" {...S}><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>,
   trash: <svg width="15" height="15" viewBox="0 0 24 24" {...S}><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13"/></svg>,
   edit: <svg width="15" height="15" viewBox="0 0 24 24" {...S}><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/></svg>,
@@ -615,11 +616,11 @@ function EntryForm({ people, onSave, user }) {
         <div className="form-grid">
           <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
           <div className="field"><label>Employee / Person</label>
-            <select value={pid} onChange={e => setPid(e.target.value)}>
-              <option value="">— select from register —</option>
-              <optgroup label="Employees & Loaders">{staff.map(p => <option key={p.id} value={p.id}>{p.name} · {p.role || p.type}</option>)}</optgroup>
-              {others.length > 0 && <optgroup label="Customers & Relations">{others.map(p => <option key={p.id} value={p.id}>{p.name} · {p.role || p.type}</option>)}</optgroup>}
-            </select></div>
+                      <select value={pid} onChange={e => setPid(e.target.value)}>
+              <option value="">— select employee or loader —</option>
+              {staff.map(p => <option key={p.id} value={p.id}>{p.name} · {p.role || p.type}</option>)}
+            </select>
+            </div>
           <div className="field"><label>Amount (Rs)</label>
             <input type="number" min="1" placeholder="e.g. 5000" value={amount} onChange={e => setAmount(e.target.value)} />
             <div className="chips">{[1000, 2500, 5000, 10000, 20000].map(v => <button type="button" key={v} className="chip" onClick={() => setAmount(String(v))}>+{v.toLocaleString()}</button>)}</div></div>
@@ -678,35 +679,35 @@ function EditAdvanceForm({ rec, people, onSave, onClose }) {
 
 function VoucherOverlay({ rec, people, onClose }) {
   const person = people.find(p => p.id === rec.person_id);
-  useEffect(() => { const t = setTimeout(() => window.print(), 400); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => window.print(), 500); return () => clearTimeout(t); }, []);
   return createPortal(
     <div className="overlay">
-      <div className="voucher-print">
-        <div className="v-head">
-          <div><div className="v-brand disp">ABBASI LOAD FLOW</div><div className="v-sub">SALARY ADVANCE VOUCHER</div></div>
-          <div className="v-ed mono">{rec.ed_no}</div>
+      <div className="voucher-receipt">
+        <div className="vr-head">
+          <div className="vr-brand">ABBASI CARD HOUSE</div>
+          <div className="vr-sub">Salary Advance Voucher</div>
         </div>
-        <div className="v-grid">
-          <div><span>Date</span><b>{fmtDate(rec.entry_date)}</b></div>
-          <div><span>Employee</span><b>{person ? person.name : 'Unknown'}</b></div>
-          <div><span>Category</span><b>{person ? person.type : '—'}</b></div>
-          <div><span>Payment Mode</span><b>{rec.mode}</b></div>
-          <div><span>Purpose</span><b>{rec.purpose || '—'}</b></div>
-          <div><span>Amount</span><b className="v-amt">{fmt(rec.amount)}</b></div>
-        </div>
-        <div className="v-signs"><span>Prepared by</span><span>Approved by</span><span>Received by</span></div>
-        <div className="v-foot">This is a system-generated voucher · ABBASI Load Flow</div>
+        <div className="vr-ed">{rec.ed_no}</div>
+        <div className="vr-row"><span className="vr-k">Date</span><span className="vr-v">{fmtDate(rec.entry_date)}</span></div>
+        <div className="vr-row"><span className="vr-k">Employee</span><span className="vr-v">{person ? person.name : 'Unknown'}</span></div>
+        <div className="vr-row"><span className="vr-k">Category</span><span className="vr-v">{person ? person.type : '—'}</span></div>
+        <div className="vr-row"><span className="vr-k">Payment</span><span className="vr-v">{rec.mode}</span></div>
+        <div className="vr-row"><span className="vr-k">Purpose</span><span className="vr-v">{rec.purpose || '—'}</span></div>
+        <div className="vr-amount">{fmt(rec.amount)}</div>
+        <div className="vr-signs"><span>Prepared</span><span>Approved</span><span>Received</span></div>
+        <div className="vr-foot">ABBASI CARD HOUSE · System Generated</div>
       </div>
       <div className="overlay-actions no-print">
         <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Again</button>
         <button className="btn ghost small" onClick={onClose}>Close</button>
       </div>
-    </div>, document.body
+    </div>,
+    document.body
   );
 }
 
 /* ============ ADVANCE REPORT ============ */
-function Report({ advances, people, onDelete, onUpdate, user }) {
+function Report({ advances, people, onDelete, onUpdate, user, onPrint, onPrintCard }) {
   const [q, setQ] = useState('');
   const [mon, setMon] = useState('');
   const [pf, setPf] = useState('');
@@ -766,9 +767,12 @@ function Report({ advances, people, onDelete, onUpdate, user }) {
                 <td style={{ color: 'var(--muted)' }}>{a.purpose || '—'}</td>
                 <td className="money" style={{ textAlign: 'right' }}>{fmt(a.amount)}</td>
                 <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                  {canEdit(user, 'advance') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(a)}>{I.edit}</button>}
-                  {canDelete(user, 'advance') && <button className="icon-btn" title="Delete" onClick={async () => { if (window.confirm('Delete ' + a.ed_no + '?')) { const { error } = await supabase.from('advances').delete().eq('id', a.id); if (error) alert('Delete failed: ' + error.message); else onDelete(a.id); } }}>{I.trash}</button>}
-                </td></tr>);
+                      <button className="icon-btn edit" title="Receipt Print" onClick={() => onPrint(a)}>{I.print}</button>
+                      <button className="icon-btn edit" title="Card Print" onClick={() => onPrintCard(a)}>{I.printCard}</button>
+                      {canEdit(user, 'advance') && <button className="icon-btn edit" title="Edit" onClick={() => setEditing(a)}>{I.edit}</button>}
+                      {canDelete(user, 'advance') && <button className="icon-btn" title="Delete" onClick={async () => { if (window.confirm('Delete ' + a.ed_no + '?')) { const { error } = await supabase.from('advances').delete().eq('id', a.id); if (error) alert('Delete failed: ' + error.message); else onDelete(a.id); } }}>{I.trash}</button>}
+                    </td>
+                </tr>);
             })}</tbody>
             <tfoot><tr><td colSpan="6">TOTAL ADVANCE</td><td className="money" style={{ textAlign: 'right' }}>{fmt(total)}</td><td className="no-print"></td></tr></tfoot>
           </table></div>}
@@ -776,7 +780,35 @@ function Report({ advances, people, onDelete, onUpdate, user }) {
     </div>
   );
 }
-
+function CardVoucherOverlay({ rec, people, onClose }) {
+  const person = people.find(p => p.id === rec.person_id);
+  useEffect(() => { const t = setTimeout(() => window.print(), 500); return () => clearTimeout(t); }, []);
+  return createPortal(
+    <div className="overlay">
+      <div className="voucher-print">
+        <div className="v-head">
+          <div><div className="v-brand disp">ABBASI CARD HOUSE</div><div className="v-sub">SALARY ADVANCE VOUCHER</div></div>
+          <div className="v-ed mono">{rec.ed_no}</div>
+        </div>
+        <div className="v-grid">
+          <div><span>Date</span><b>{fmtDate(rec.entry_date)}</b></div>
+          <div><span>Employee</span><b>{person ? person.name : 'Unknown'}</b></div>
+          <div><span>Category</span><b>{person ? person.type : '—'}</b></div>
+          <div><span>Payment Mode</span><b>{rec.mode}</b></div>
+          <div><span>Purpose</span><b>{rec.purpose || '—'}</b></div>
+          <div><span>Amount</span><b className="v-amt">{fmt(rec.amount)}</b></div>
+        </div>
+        <div className="v-signs"><span>Prepared by</span><span>Approved by</span><span>Received by</span></div>
+        <div className="v-foot">This is a system-generated voucher · Abbasi Card House</div>
+      </div>
+      <div className="overlay-actions no-print">
+        <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Again</button>
+        <button className="btn ghost small" onClick={onClose}>Close</button>
+      </div>
+    </div>,
+    document.body
+  );
+}
 /* ============ EMPLOYEE MONTHLY ============ */
 function EmpMonthly({ people, advances, user }) {
   const staff = people.filter(p => p.type === 'Employee' || p.type === 'Loader');
@@ -1651,6 +1683,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
   const [printRec, setPrintRec] = useState(null);
+  const [printCard, setPrintCard] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1694,7 +1727,7 @@ export default function App() {
         <Topbar view={view} setView={setView} user={user} onMenu={() => setMenuOpen(true)} />
         {view === 'dashboard' && <Dashboard people={data.people} advances={data.advances} freights={data.freights} visits={data.visits} expenses={data.expenses} setView={setView} user={user} />}
         {view === 'entry' && canView(user, 'entry') && <EntryForm people={data.people} onSave={addAdvance} user={user} />}
-        {view === 'report' && canView(user, 'report') && <Report advances={data.advances} people={data.people} onDelete={delAdvance} onUpdate={updateAdvance} user={user} />}
+        {view === 'report' && canView(user, 'report') && <Report advances={data.advances} people={data.people} onDelete={delAdvance} onUpdate={updateAdvance} user={user} onPrint={setPrintRec} onPrintCard={setPrintCard} />}
         {view === 'empMonthly' && canView(user, 'empMonthly') && <EmpMonthly people={data.people} advances={data.advances} user={user} />}
         {view === 'freight' && canView(user, 'freight') && <FreightEntry people={data.people} freights={data.freights} onSave={addFreight} onUpdate={updateFreight} onDelete={delFreight} user={user} />}
         {view === 'ledger' && canView(user, 'ledger') && <LoaderLedger people={data.people} advances={data.advances} freights={data.freights} />}
@@ -1706,6 +1739,7 @@ export default function App() {
       </main>
       {toast && <div key={toast.id} className={'toast' + (toast.type === 'warn' ? ' warn' : '')}>✓ {toast.msg}</div>}
       {printRec && <VoucherOverlay rec={printRec} people={data.people} onClose={() => setPrintRec(null)} />}
+       {printCard && <CardVoucherOverlay rec={printCard} people={data.people} onClose={() => setPrintCard(null)} />}
     </div>
   );
 }
