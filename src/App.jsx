@@ -147,9 +147,9 @@ function LoginPage({ onLogin }) {
           <h2 className="disp">Sign in to your account</h2>
           {error && <div className="err">{error}</div>}
           <div className="field"><label>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus placeholder="Email" /></div>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus placeholder="Enter Email" /></div>
           <div className="field"><label>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Password" /></div>
           <button className="btn primary" type="submit" disabled={loading} style={{ width: '100%', justifyContent: 'center' }}>
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
@@ -1750,22 +1750,53 @@ export default function App() {
   const [printRec, setPrintRec] = useState(null);
   const [printCard, setPrintCard] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        supabase.from('profiles').select('*').eq('id', session.user.id).single().then(({ data: profile }) => {
-          if (profile && profile.active) setUser({ ...profile, authId: session.user.id, email: session.user.email });
-          setLoading(false);
+    useEffect(() => {
+    /* Check sessionStorage first (survives reload, dies on new tab) */
+    const saved = sessionStorage.getItem('abbasi_user');
+    if (saved) {
+      try {
+        const u = JSON.parse(saved);
+        setUser(u);
+        setLoading(false);
+        /* Verify session still valid in background */
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session?.user) { sessionStorage.removeItem('abbasi_user'); setUser(null); }
         });
-      } else setLoading(false);
+        return;
+      } catch (e) { sessionStorage.removeItem('abbasi_user'); }
+    }
+    /* No saved session — fresh tab, force logout */
+    supabase.auth.signOut().then(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        if (profile && profile.active) {
+          const userData = { ...profile, authId: session.user.id, email: session.user.email };
+          setUser(userData);
+          sessionStorage.setItem('abbasi_user', JSON.stringify(userData));
+        } else {
+          await supabase.auth.signOut();
+        }
+        setLoading(false);
+      }
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        sessionStorage.removeItem('abbasi_user');
+      }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') setUser(null); });
     return () => subscription.unsubscribe();
   }, []);
   useEffect(() => { if (user) fetchAll().then(setData); }, [user]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3400); return () => clearTimeout(t); }, [toast]);
   const notify = (msg, type = 'ok') => setToast({ msg, type, id: uid() });
-  const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); };
+    const handleLogout = async () => {
+    sessionStorage.removeItem('abbasi_user');
+    await supabase.auth.signOut();
+    setUser(null);
+  };
   if (loading) return <div className="login-page"><div className="login-card"><h2>Loading…</h2></div></div>;
   if (!user) return <LoginPage onLogin={setUser} />;
   const addAdvance = (rec, andPrint) => { setData(d => ({ ...d, advances: [...d.advances, rec] })); notify('Advance ' + rec.ed_no + ' saved'); if (andPrint) setPrintRec(rec); };
