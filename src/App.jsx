@@ -147,7 +147,7 @@ function LoginPage({ onLogin }) {
           <h2 className="disp">Sign in to your account</h2>
           {error && <div className="err">{error}</div>}
           <div className="field"><label>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus placeholder="muzamil@abbasi.com" /></div>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus placeholder="Email" /></div>
           <div className="field"><label>Password</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></div>
           <button className="btn primary" type="submit" disabled={loading} style={{ width: '100%', justifyContent: 'center' }}>
