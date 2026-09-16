@@ -516,7 +516,7 @@ function Dashboard({ people, advances, freights, visits, expenses, setView, user
   return (
     <>
       <div className="route-strip rise">
-        <h2>ABBASI CARD HOUSE.</h2>
+        <h2>Load Flow is moving.</h2>
         <p>{advances.length} advance vouchers · {freights.length} freight gatepasses · {visits.length} field runs · {expenses.length} expenses logged.</p>
         <svg viewBox="0 0 600 70" preserveAspectRatio="none">
           <path className="route-dash" d="M0,50 C90,16 190,62 300,32 S 480,44 600,18" />
@@ -1418,13 +1418,19 @@ function VisitReports({ visits }) {
   const [toMonth, setToMonth] = useState(thisMonthKey());
   const [groupByDate, setGroupByDate] = useState(false);
   const [groupBySuccess, setGroupBySuccess] = useState(false);
+    const [searchQ, setSearchQ] = useState('');
   const { apply, Th } = useSort('', '');
 
   const dayRuns = useMemo(() => [...visits]
     .filter(v => v.visit_date >= fromDate && v.visit_date <= toDate)
     .sort((a, b) => a.visit_date.localeCompare(b.visit_date)), [visits, fromDate, toDate]);
 
-  const allStops = useMemo(() => dayRuns.flatMap(v => (v.visit_entries || []).map(x => ({ ...x, runDate: v.visit_date, runKm: v.bike_km }))), [dayRuns]);
+   const allStopsRaw = useMemo(() => dayRuns.flatMap(v => (v.visit_entries || []).map(x => ({ ...x, runDate: v.visit_date, runKm: v.bike_km }))), [dayRuns]);
+  const allStops = useMemo(() => {
+    if (!searchQ) return allStopsRaw;
+    const q = searchQ.toLowerCase();
+    return allStopsRaw.filter(x => (x.customer + ' ' + (x.note || '') + ' ' + x.contact_type + ' ' + x.payment).toLowerCase().includes(q));
+  }, [allStopsRaw, searchQ]);
 
   const sortedStops = apply(allStops, {
     customer: x => x.customer,
@@ -1563,12 +1569,14 @@ function VisitReports({ visits }) {
       {tab === 'daily' && (
         <>
           <PrintHead title="Daily Customer Visit Report" meta={`${periodLabel} · ${dKm} km · ${allStops.length} stops`} />
-          <div className="filters no-print">
-            <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
-            <div className="field" style={{ margin: 0, minWidth: 150 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
+                    <div className="filters no-print">
+            <div className="search-box" style={{ flex: '1 1 280px' }}>{I.search}<input placeholder="Search customer, note…" value={searchQ} onChange={e => setSearchQ(e.target.value)} /></div>
+            <div className="field" style={{ margin: 0, minWidth: 140 }}><label style={{ fontSize: 9.5 }}>From Date</label><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} /></div>
+            <div className="field" style={{ margin: 0, minWidth: 140 }}><label style={{ fontSize: 9.5 }}>To Date</label><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} /></div>
             <button className="chip" onClick={setThisMonth}>This Month</button>
             <button className="chip" onClick={setLastMonth}>Last Month</button>
             <button className="chip" onClick={setAllTime}>All Time</button>
+            {searchQ && <button className="chip" onClick={() => setSearchQ('')}>Clear</button>}
             <span style={{ alignSelf: 'flex-end', fontSize: 12, color: 'var(--muted)', marginLeft: 6 }}>{dayRuns.length} runs · {allStops.length} stops</span>
             <button className="btn primary small" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>{I.print} Print</button>
           </div>
