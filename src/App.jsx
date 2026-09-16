@@ -516,7 +516,7 @@ function Dashboard({ people, advances, freights, visits, expenses, setView, user
   return (
     <>
       <div className="route-strip rise">
-        <h2>Load Flow is moving.</h2>
+        <h2>ABBASI CARD HOUSE.</h2>
         <p>{advances.length} advance vouchers · {freights.length} freight gatepasses · {visits.length} field runs · {expenses.length} expenses logged.</p>
         <svg viewBox="0 0 600 70" preserveAspectRatio="none">
           <path className="route-dash" d="M0,50 C90,16 190,62 300,32 S 480,44 600,18" />
