@@ -1419,7 +1419,7 @@ function VisitReports({ visits }) {
   const [groupByDate, setGroupByDate] = useState(false);
   const [groupBySuccess, setGroupBySuccess] = useState(false);
     const [searchQ, setSearchQ] = useState('');
-  const { apply, Th } = useSort('', '');
+  const { apply, Th } = useSort('date', 'desc');
 
   const dayRuns = useMemo(() => [...visits]
     .filter(v => v.visit_date >= fromDate && v.visit_date <= toDate)
