@@ -13,6 +13,11 @@ const today = () => {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 };
+const yesterday = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
 const thisMonthKey = () => today().slice(0, 7);
 const fmt = n => 'Rs ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
 const short = n => n >= 1000 ? ('Rs ' + (n / 1000).toFixed(n % 1000 ? 1 : 0) + 'k') : ('Rs ' + n);
@@ -56,6 +61,42 @@ function useSort(defaultKey = '', defaultDir = '') {
     </th>
   );
   return { sortKey, sortDir, toggle, apply, Th };
+}
+
+/* Visit reports retain earlier columns as primary sort keys. */
+function useMultiSort() {
+  const [sorts, setSorts] = useState([]);
+  const toggle = key => setSorts(current => {
+    const existing = current.find(sort => sort.key === key);
+    if (!existing) return [...current, { key, dir: 'asc' }];
+    if (existing.dir === 'asc') return current.map(sort => sort.key === key ? { ...sort, dir: 'desc' } : sort);
+    return current.filter(sort => sort.key !== key);
+  });
+  const apply = (list, getters = {}) => [...list].sort((a, b) => {
+    for (const { key, dir } of sorts) {
+      const get = getters[key] || (row => row[key]);
+      const va = get(a), vb = get(b);
+      if (va == null && vb == null) continue;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      const cmp = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb : String(va).localeCompare(String(vb), undefined, { numeric: true });
+      if (cmp) return dir === 'asc' ? cmp : -cmp;
+    }
+    return 0;
+  });
+  const Th = ({ k, children, align }) => {
+    const index = sorts.findIndex(sort => sort.key === k);
+    return <th style={{ textAlign: align || 'left', whiteSpace: 'nowrap' }}>
+      <button type="button" onClick={() => toggle(k)} style={{ font: 'inherit', color: 'inherit', border: 0, background: 'none', padding: 0, cursor: 'pointer' }}
+        title="Click to sort ascending, descending, then remove. Earlier columns keep priority.">
+        {children}<span style={{ marginLeft: 5, opacity: index < 0 ? 0.3 : 1, fontSize: 11 }}>
+          {index < 0 ? '⇅' : (sorts[index].dir === 'asc' ? '▲' : '▼') + (index + 1)}
+        </span>
+      </button>
+    </th>;
+  };
+  return { apply, Th, clear: () => setSorts([]) };
 }
 
 /* ============ icons ============ */
@@ -454,9 +495,9 @@ function Sidebar({ view, setView, people, advances, freights, user, onLogout, op
 function Topbar({ view, setView, user, onMenu }) {
   const meta = {
     dashboard: ['Operations', 'Operations Dashboard', 'Advances, freight, visits & people — one control deck'],
-    entry: ['Voucher Desk', 'Salary Advance Entry', 'Every entry is auto-alloted the next ED serial'],
+    entry: ['Voucher Desk', 'Salary Advance Entry', 'Every entry is auto-alloted the next EA serial'],
     report: ['Ledger', 'Advance Report', 'Search, filter, sort, edit, print & export'],
-    empMonthly: ['Statement', 'Employee Monthly Statement', 'Pick an employee and month — every ED entry listed'],
+    empMonthly: ['Statement', 'Employee Monthly Statement', 'Pick an employee and month — every EA entry listed'],
     freight: ['Loader Operations', 'Freight Entry', 'Gatepass freight booked against each loader'],
     ledger: ['Loader Operations', 'Loader Ledger', 'Freight credits minus advance debits — live balance'],
     expense: ['Accounts', 'Expense Detail', 'Daily expenses, types and filtered reports'],
@@ -573,13 +614,14 @@ function EntryForm({ people, onSave, user }) {
   const [purpose, setPurpose] = useState('');
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
-  const [nextEdNo, setNextEdNo] = useState('ED-001');
+  const [nextEdNo, setNextEdNo] = useState(null);
   const staff = people.filter(p => p.type === 'Employee' || p.type === 'Loader');
   const others = people.filter(p => p.type === 'Customer' || p.type === 'Relation');
   useEffect(() => {
     async function fetchNextEd() {
-      const { data } = await supabase.from('advances').select('ed_no').order('id', { ascending: false }).limit(1);
-      if (data && data.length > 0) setNextEdNo(edNo(parseInt(String(data[0].ed_no).replace(/\D/g, ''), 10) + 1));
+      const { data, error } = await supabase.from('advances').select('ed_no').order('id', { ascending: false }).limit(1);
+      if (error) { setErr(error.message); return; }
+      setNextEdNo(edNo(data?.length ? (parseInt(String(data[0].ed_no).replace(/\D/g, ''), 10) || 0) + 1 : 1));
     }
     fetchNextEd();
   }, []);
@@ -591,8 +633,9 @@ function EntryForm({ people, onSave, user }) {
     if (!amt || amt <= 0) return setErr('Enter a valid amount greater than zero.');
     setErr(''); setSaving(true);
     try {
-      const { data: maxData } = await supabase.from('advances').select('ed_no').order('id', { ascending: false }).limit(1);
-      let newEdNo = 'ED-001';
+      const { data: maxData, error: numberError } = await supabase.from('advances').select('ed_no').order('id', { ascending: false }).limit(1);
+      if (numberError) throw numberError;
+      let newEdNo = edNo(1);
       if (maxData && maxData.length > 0) newEdNo = edNo(parseInt(String(maxData[0].ed_no).replace(/\D/g, ''), 10) + 1);
       const rec = { ed_no: newEdNo, entry_date: date, person_id: person.id, amount: amt, mode, purpose: purpose.trim() };
       const { data, error } = await supabase.from('advances').insert(rec).select().single();
@@ -606,12 +649,12 @@ function EntryForm({ people, onSave, user }) {
     <div className="entry-wrap">
       <div className="ticket">
         <div className="t-top">Advance Voucher</div>
-        <div className="t-ed">{nextEdNo}</div>
+        <div className="t-ed">{nextEdNo || 'Loading…'}</div>
         <span className="t-status"><span className="pulse" /> AUTO-ALOTED</span>
-        <div className="t-foot">Serial locks on save. Next: <b className="mono">{edNo(parseInt(nextEdNo.replace(/\D/g, ''), 10) + 1)}</b><br />Date: <b className="mono">{fmtDate(date)}</b></div>
+        <div className="t-foot">Serial locks on save. Next: <b className="mono">{nextEdNo ? edNo(parseInt(nextEdNo.replace(/\D/g, ''), 10) + 1) : '—'}</b><br />Date: <b className="mono">{fmtDate(date)}</b></div>
       </div>
       <form className="card" style={{ padding: 24 }} onSubmit={e => doSubmit(false, e)}>
-        <div className="card-h" style={{ padding: '0 0 16px', marginBottom: 16 }}><h3>Salary Advance Entry</h3><span className="tag">ED series</span></div>
+        <div className="card-h" style={{ padding: '0 0 16px', marginBottom: 16 }}><h3>Salary Advance Entry</h3><span className="tag">EA series</span></div>
         {err && <div className="err">{err}</div>}
         <div className="form-grid">
           <div className="field"><label>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} required /></div>
@@ -628,7 +671,7 @@ function EntryForm({ people, onSave, user }) {
           <input value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="e.g. Medical, school fees, Eid expenses…" /></div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Advance'}</button>
-          <button className="btn amber" type="button" onClick={() => doSubmit(true)} disabled={saving}>Save & Print {nextEdNo}</button>
+          <button className="btn amber" type="button" onClick={() => doSubmit(true)} disabled={saving}>Save & Print {nextEdNo || ''}</button>
         </div>
       </form>
     </div>
@@ -708,11 +751,13 @@ function Report({ advances, people, onDelete, onUpdate, user, onPrint, onPrintCa
   const [q, setQ] = useState('');
   const [mon, setMon] = useState('');
   const [pf, setPf] = useState('');
+  const [personType, setPersonType] = useState('');
   const [editing, setEditing] = useState(null);
   const { apply, Th } = useSort('entry_date', 'desc');
   const months = [...new Set(advances.map(a => a.entry_date ? a.entry_date.slice(0, 7) : ''))].filter(Boolean).sort().reverse();
-  const names = [...new Set(advances.map(a => { const p = people.find(x => x.id === a.person_id); return p ? p.name : 'Unknown'; }))].sort();
+  const names = [...new Set(advances.filter(a => !personType || people.find(p => p.id === a.person_id)?.type === personType).map(a => { const p = people.find(x => x.id === a.person_id); return p ? p.name : 'Unknown'; }))].sort();
   const list = [...advances]
+    .filter(a => !personType || people.find(p => p.id === a.person_id)?.type === personType)
     .filter(a => !q || (a.ed_no + (a.purpose || '') + a.mode).toLowerCase().includes(q.toLowerCase()) || (people.find(p => p.id === a.person_id)?.name || '').toLowerCase().includes(q.toLowerCase()))
     .filter(a => !mon || (a.entry_date && a.entry_date.slice(0, 7) === mon))
     .filter(a => !pf || (people.find(p => p.id === a.person_id)?.name === pf))
@@ -726,22 +771,27 @@ function Report({ advances, people, onDelete, onUpdate, user, onPrint, onPrintCa
   const total = list.reduce((s, a) => s + Number(a.amount), 0);
   const exportCSV = () => {
     const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const rows = [['ED No', 'Date', 'Employee', 'Type', 'Mode', 'Purpose', 'Amount (Rs)'],
-      ...list.map(a => { const p = people.find(x => x.id === a.person_id); return [a.ed_no, a.entry_date, p?.name || 'Unknown', p?.type || '—', a.mode, a.purpose, a.amount]; })]
+    const rows = [['EA No', 'Date', 'Employee', 'Type', 'Mode', 'Purpose', 'Amount (Rs)'],
+      ...sorted.map(a => { const p = people.find(x => x.id === a.person_id); return [a.ed_no, a.entry_date, p?.name || 'Unknown', p?.type || '—', a.mode, a.purpose, a.amount]; })]
       .map(r => r.map(esc).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([rows], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = 'abbasi-advance-report.csv'; a.click(); URL.revokeObjectURL(url);
   };
   return (
     <div className="card rise">
-      <PrintHead title="Salary Advance Report" meta={`${list.length} entries · Total ${fmt(total)}`} />
+      <PrintHead title="Salary Advance Report" meta={`${personType || 'All parties'} · ${list.length} entries · Total ${fmt(total)}`} />
       <div className="card-h"><h3>Advance Ledger</h3>
         <div style={{ display: 'flex', gap: 8 }} className="no-print">
           <button className="btn ghost small" onClick={exportCSV}>{I.dl} Export CSV</button>
           <button className="btn primary small" onClick={() => window.print()}>{I.print} Print Report</button>
         </div></div>
       <div className="filters no-print">
-        <div className="search-box">{I.search}<input placeholder="Search ED no, name, purpose…" value={q} onChange={e => setQ(e.target.value)} /></div>
+        {['', 'Employee', 'Loader'].map(type => <button type="button" key={type || 'all'}
+          className={'chip' + (personType === type ? ' active-chip' : '')} aria-pressed={personType === type}
+          onClick={() => { setPersonType(type); setPf(''); }}>{type || 'All'}</button>)}
+      </div>
+      <div className="filters no-print">
+        <div className="search-box">{I.search}<input placeholder="Search EA no, name, purpose…" value={q} onChange={e => setQ(e.target.value)} /></div>
         <select value={mon} onChange={e => setMon(e.target.value)}><option value="">All months</option>{months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}</select>
         <select value={pf} onChange={e => setPf(e.target.value)}><option value="">All parties</option>{names.map(n => <option key={n} value={n}>{n}</option>)}</select>
       </div>
@@ -752,7 +802,7 @@ function Report({ advances, people, onDelete, onUpdate, user, onPrint, onPrintCa
       </div>
       {list.length === 0 ? <div className="empty"><div className="big">🗂</div>No advance entries match.</div>
         : <div className="tbl-wrap"><table>
-            <thead><tr><Th k="ed_no">ED No</Th><Th k="entry_date">Date</Th><Th k="name">Employee</Th><Th k="type">Type</Th><Th k="mode">Mode</Th><Th k="purpose">Purpose</Th><Th k="amount" align="right">Amount</Th><th className="no-print"></th></tr></thead>
+            <thead><tr><Th k="ed_no">EA No</Th><Th k="entry_date">Date</Th><Th k="name">Employee</Th><Th k="type">Type</Th><Th k="mode">Mode</Th><Th k="purpose">Purpose</Th><Th k="amount" align="right">Amount</Th><th className="no-print"></th></tr></thead>
             <tbody>{sorted.map((a, i) => {
               const p = people.find(x => x.id === a.person_id);
               return (<tr key={a.ed_no} style={{ animationDelay: Math.min(i * 30, 300) + 'ms' }}>
@@ -832,7 +882,7 @@ function EmpMonthly({ people, advances, user }) {
           <span className="tag">{person ? person.type : ''}{person && person.role ? ' · ' + person.role : ''}</span></div>
         {list.length === 0 ? <div className="empty"><div className="big">📄</div>No advance entries for this employee in {monthLabel(mon)}.</div>
           : <div className="tbl-wrap"><table>
-              <thead><tr><Th k="ed_no">ED No</Th><Th k="entry_date">Date</Th><Th k="mode">Payment Mode</Th><Th k="purpose">Purpose</Th><Th k="amount" align="right">Amount</Th></tr></thead>
+              <thead><tr><Th k="ed_no">EA No</Th><Th k="entry_date">Date</Th><Th k="mode">Payment Mode</Th><Th k="purpose">Purpose</Th><Th k="amount" align="right">Amount</Th></tr></thead>
               <tbody>{sorted.map((a, i) => (<tr key={a.ed_no} style={{ animationDelay: i * 40 + 'ms' }}>
                 <td><span className="ed-pill">{a.ed_no}</span></td><td className="mono" style={{ fontSize: 12.5 }}>{fmtDate(a.entry_date)}</td>
                 <td>{a.mode}</td><td style={{ color: 'var(--muted)' }}>{a.purpose || '—'}</td><td className="money" style={{ textAlign: 'right' }}>{fmt(a.amount)}</td></tr>))}</tbody>
@@ -1412,14 +1462,14 @@ function EditVisitForm({ rec, customers, onSave, onClose }) {
 /* ============ VISIT REPORTS ============ */
 function VisitReports({ visits }) {
   const [tab, setTab] = useState('daily');
-  const [fromDate, setFromDate] = useState(today().slice(0, 8) + '01');
-  const [toDate, setToDate] = useState(today());
+  const [fromDate, setFromDate] = useState(yesterday);
+  const [toDate, setToDate] = useState(yesterday);
   const [fromMonth, setFromMonth] = useState(thisMonthKey());
   const [toMonth, setToMonth] = useState(thisMonthKey());
-  const [groupByDate, setGroupByDate] = useState(false);
-  const [groupBySuccess, setGroupBySuccess] = useState(false);
+  const [groupByDate, setGroupByDate] = useState(true);
+  const [groupBySuccess, setGroupBySuccess] = useState(true);
     const [searchQ, setSearchQ] = useState('');
-  const { apply, Th } = useSort('date', 'desc');
+  const { apply, Th, clear: clearSort } = useMultiSort();
 
   const dayRuns = useMemo(() => [...visits]
     .filter(v => v.visit_date >= fromDate && v.visit_date <= toDate)
@@ -1586,6 +1636,10 @@ function VisitReports({ visits }) {
             <button className={'chip' + (groupByDate ? ' active-chip' : '')} onClick={() => setGroupByDate(v => !v)}>By Date</button>
             <button className={'chip' + (groupBySuccess ? ' active-chip' : '')} onClick={() => setGroupBySuccess(v => !v)}>By Result</button>
             {(groupByDate || groupBySuccess) && <span style={{ alignSelf: 'center', fontSize: 11, color: 'var(--teal)', fontWeight: 600 }}>{groupByDate && groupBySuccess ? 'Date + Result' : groupByDate ? 'By Date' : 'By Result'}</span>}
+          </div>
+          <div className="filters no-print" style={{ paddingTop: 4 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Sort multiple columns in order: first Visited / Call, then Payment. Numbers show priority.</span>
+            <button type="button" className="chip" onClick={clearSort}>Clear Sorting</button>
           </div>
           <div className="sumbar">
             <div className="sumbox hot"><div className="k">Total Run</div><div className="v">{dKm} km</div></div>
