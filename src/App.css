@@ -580,3 +580,27 @@ tfoot td.money{font-size:14px}
 .card{overflow:visible}
 .search-select-dropdown{z-index:999}
 .search-select-backdrop{z-index:998}
+.voucher-receipt .vr-row:nth-child(4) .vr-v {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #920e0e !important;
+  background-color: #D4F51C !important;
+  padding: 2px 6px;
+  border-radius: 4px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Employee name — card voucher */
+.voucher-print .v-grid > div:nth-child(2) > b {
+  display: inline-block;
+  width: fit-content;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  color: #920e0e !important;
+  background-color: #C7F21A !important;
+  padding: 3px 8px;
+  border-radius: 5px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
