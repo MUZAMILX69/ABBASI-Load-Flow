@@ -578,8 +578,10 @@ tfoot td.money{font-size:14px}
 .card.rise .sumbox{flex:1 1 20%;min-width:100px}
 /* Fix SearchSelect dropdown inside cards */
 .card{overflow:visible}
-.search-select-dropdown{z-index:999}
-.search-select-backdrop{z-index:998}
+.search-select-dropdown {
+  z-index: 10002 !important;}
+.search-select-backdrop {
+  z-index: 10001 !important;}
 .voucher-receipt .vr-row:nth-child(4) .vr-v {
   font-size: 14px !important;
   font-weight: 800 !important;
